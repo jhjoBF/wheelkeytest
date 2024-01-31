@@ -1,4 +1,5 @@
 #include "AbstractThread.h"
+#include <cstring>
 
 AbstractThread::AbstractThread(int milliSeconds)
     : _stop(true), _milliSeconds(milliSeconds), _defaultSeconds(milliSeconds) {}
@@ -36,7 +37,7 @@ void AbstractThread::stop() {
 
 bool AbstractThread::join() {
     if (_threadObject.joinable() == true) {
-        printf("%s, %s, %d\n", __FILE__, __func__, __LINE__);
+        printf("%s, %s, %d\n", __FILENAME__, __func__, __LINE__);
         _threadObject.join();
         return true;
     }

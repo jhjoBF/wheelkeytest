@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <cstring>
 #include <vector>
 #include <signal.h>
 #include <execinfo.h>
@@ -17,13 +18,13 @@ void callTrace() {
 
     for (size_t i = 0; i < size; i++) {
     //for (size_t i = size - 1; i >= 2; i--) {
-        fprintf(stderr, "[%2d] : %s\n", i, strings[i]);
+        fprintf(stderr, "[%2d] : %s\n", (int)i, strings[i]);
     }
     free(strings);
 }
 
 void signalHander(int signal) {
-    printf("%s %s %d, signal %d\n", __FILE__, __func__, __LINE__, signal);
+    printf("%s %s %d, signal %d\n", __FILENAME__, __func__, __LINE__, signal);
     if ((signal != SIGTERM) && (signal != SIGINT)) {
         callTrace();
         SIG_DFL(signal);
@@ -40,7 +41,7 @@ void initSignal() {
 }
 
 int main() {
-    std::vector<std::string> msg {"Hello", "World", "!"};
+    std::vector<std::string> msg {"Hello", "world"};
     for (const std::string& word : msg)
         std::cout << word << " ";
     std::cout << std::endl;

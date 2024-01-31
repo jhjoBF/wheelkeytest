@@ -1,9 +1,10 @@
 #include <unistd.h>
+#include <cstring>
 #include "App.h"
 #include "MainThread.h"
 
 App::App() : AbstractThread(300) {
-    printf("%s, %s, %d #### Start App\n", __FILE__, __func__, __LINE__);
+    printf("%s, %s:%d #### Start App\n", __FILENAME__, __func__, __LINE__);
 }
 App::~App() {}
 
@@ -29,7 +30,7 @@ void App::finalize() {
         thread->join();
     for (const auto& thread : _threads)
         delete thread;
-    printf("%s, %s, %d #### Finish App\n", __FILE__, __func__, __LINE__);
+    printf("%s, %s:%d #### Finish App\n", __FILENAME__, __func__, __LINE__);
 }
 
 void App::worker() {
