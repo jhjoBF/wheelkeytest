@@ -28,14 +28,17 @@
 #define LONG_PUSH               0x02
 #define WHEEL_LEFT              0x03
 #define WHEEL_RIGHT             0x04
+#if USE_TOUCH
 #define TOUCH                   0x05
 #define TOUCH_LONG              0x06
 #define TOUCH_LEFT              0x07
 #define TOUCH_RIGHT             0x08
 #define TOUCH_UP                0x09
 #define TOUCH_DOWN              0x0a
+#endif
 
-#define WIDTH_MAX   466
+//#define WIDTH_MAX   466
+#define WIDTH_MAX   320
 
 #define COLOR_BLACK 0x0000
 #define COLOR_WHITE 0xffff
@@ -74,7 +77,7 @@ void MainThread::worker() {
     }
     else if (_state == Welcome) {
         showImage(0, 0, 0);
-        sendCmd(CMD_SHOW, 1);
+        //sendCmd(CMD_SHOW, 1);
         _state = Runing;
     }
 
@@ -116,6 +119,7 @@ void MainThread::worker() {
         }
         else if (resp.code == RESP_DISPLAY_COMPLETE) {
             printf("  << Display\n");
+            sendCmd(CMD_SHOW, 1);
         }
         else {
             printf("[%02x](%02X) ", resp.code, resp.len);
@@ -152,22 +156,24 @@ void MainThread::actionMode(respData resp) {
         switch (mode) {
             case ModeIdle:
                 showImage(0, 0, 0);
-                sendCmd(CMD_SHOW, 1);
+                //sendCmd(CMD_SHOW, 1);
                 break;
             case ModeRainbow:
                 halfMode = HalfNone;
                 drawRect(colorCode[idx], 0, 0, WIDTH_MAX, WIDTH_MAX);
-                sendCmd(CMD_SHOW, 1);
+                //sendCmd(CMD_SHOW, 1);
                 break;
             case ModePicture:
                 idx = 1;
                 halfMode = HalfNone;
                 showImage(idx, 0, 0);
-                sendCmd(CMD_SHOW, 1);
+                //sendCmd(CMD_SHOW, 1);
                 break;
+#if USE_TOUCH
             case ModeTouch:
                 drawRect(COLOR_BLACK, 0, 0, WIDTH_MAX, WIDTH_MAX);
-                sendCmd(CMD_SHOW, 1);
+                //sendCmd(CMD_SHOW, 1);
+#endif
             default:
                 printf("Mode error: %d\n", mode);
                 break;
@@ -182,13 +188,13 @@ void MainThread::actionMode(respData resp) {
                 halfMode--;
                 if (halfMode == HalfNone) halfMode = HalfLeft;
                 drawRectHalf(halfMode, colorCode[idx]);
-                sendCmd(CMD_SHOW, 1);
+                //sendCmd(CMD_SHOW, 1);
             }
             else {
                 if (idx > 0) {
                     idx--;
                     drawRect(colorCode[idx], 0, 0, WIDTH_MAX, WIDTH_MAX);
-                    sendCmd(CMD_SHOW, 1);
+                    //sendCmd(CMD_SHOW, 1);
                 }
             }
             break;
@@ -197,44 +203,46 @@ void MainThread::actionMode(respData resp) {
                 if (halfMode == HalfLeft) halfMode = HalfUp;
                 else halfMode++;
                 drawRectHalf(halfMode, colorCode[idx]);
-                sendCmd(CMD_SHOW, 1);
+                //sendCmd(CMD_SHOW, 1);
             }
             else {
                 if (idx < 6) {
                     idx++;
                     drawRect(colorCode[idx], 0, 0, WIDTH_MAX, WIDTH_MAX);
-                    sendCmd(CMD_SHOW, 1);
+                    //sendCmd(CMD_SHOW, 1);
                 }
             }
             break;
+#if USE_TOUCH
         case TOUCH:
             if (halfMode)
                 halfMode = HalfNone;
             else
                 if (++idx > 6) idx = 0;
             drawRect(colorCode[idx], 0, 0, WIDTH_MAX, WIDTH_MAX);
-            sendCmd(CMD_SHOW, 1);
+            //sendCmd(CMD_SHOW, 1);
             break;
         case TOUCH_LEFT:
             halfMode = HalfLeft;
             drawRectHalf(halfMode, colorCode[idx]);
-            sendCmd(CMD_SHOW, 1);
+            //sendCmd(CMD_SHOW, 1);
             break;
         case TOUCH_RIGHT:
             halfMode = HalfRight;
             drawRectHalf(halfMode, colorCode[idx]);
-            sendCmd(CMD_SHOW, 1);
+            //sendCmd(CMD_SHOW, 1);
             break;
         case TOUCH_UP:
             halfMode = HalfUp;
             drawRectHalf(halfMode, colorCode[idx]);
-            sendCmd(CMD_SHOW, 1);
+            //sendCmd(CMD_SHOW, 1);
             break;
         case TOUCH_DOWN:
             halfMode = HalfDown;
             drawRectHalf(halfMode, colorCode[idx]);
-            sendCmd(CMD_SHOW, 1);
+            //sendCmd(CMD_SHOW, 1);
             break;
+#endif
         default:
             printf("unknown cmd 0x%x\n", resp.data[0]);
             break;
@@ -248,12 +256,12 @@ void MainThread::actionMode(respData resp) {
                     if (halfMode == HalfNone) halfMode = HalfLeft;
                     showImage(idx, 0, 0);
                     drawRectHalf(halfMode, COLOR_BLACK);
-                    sendCmd(CMD_SHOW, 1);
+                    //sendCmd(CMD_SHOW, 1);
                 }
                 else if (idx > 1) {
                     idx--;
                     showImage(idx, 0, 0);
-                    sendCmd(CMD_SHOW, 1);
+                    //sendCmd(CMD_SHOW, 1);
                 }
                 break;
             case WHEEL_RIGHT:
@@ -262,50 +270,53 @@ void MainThread::actionMode(respData resp) {
                     else halfMode++;
                     showImage(idx, 0, 0);
                     drawRectHalf(halfMode, COLOR_BLACK);
-                    sendCmd(CMD_SHOW, 1);
+                    //sendCmd(CMD_SHOW, 1);
                 } else if (idx < 7) {
                     idx++;
                     showImage(idx, 0, 0);
-                    sendCmd(CMD_SHOW, 1);
+                    //sendCmd(CMD_SHOW, 1);
                 }
                 break;
+#if USE_TOUCH
             case TOUCH:
                 if (halfMode)
                     halfMode = HalfNone;
                 else
                     if (++idx > 7) idx = 1;
                 showImage(idx, 0, 0);
-                sendCmd(CMD_SHOW, 1);
+                //sendCmd(CMD_SHOW, 1);
                 break;
             case TOUCH_LEFT:
                 halfMode = HalfRight;
                 showImage(idx, 0, 0);
                 drawRectHalf(halfMode, COLOR_BLACK);
-                sendCmd(CMD_SHOW, 1);
+                //sendCmd(CMD_SHOW, 1);
                 break;
             case TOUCH_RIGHT:
                 halfMode = HalfLeft;
                 showImage(idx, 0, 0);
                 drawRectHalf(halfMode, COLOR_BLACK);
-                sendCmd(CMD_SHOW, 1);
+                //sendCmd(CMD_SHOW, 1);
                 break;
             case TOUCH_UP:
                 halfMode = HalfDown;
                 showImage(idx, 0, 0);
                 drawRectHalf(halfMode, COLOR_BLACK);
-                sendCmd(CMD_SHOW, 1);
+                //sendCmd(CMD_SHOW, 1);
                 break;
             case TOUCH_DOWN:
                 halfMode = HalfUp;
                 showImage(idx, 0, 0);
                 drawRectHalf(halfMode, COLOR_BLACK);
-                sendCmd(CMD_SHOW, 1);
+                //sendCmd(CMD_SHOW, 1);
                 break;
+#endif
             default:
                 printf("ModePicture unknown : %d\n", resp.data[0]);
                 break;
         }
     }
+#if USE_TOUCH
     else if (mode == ModeTouch) {
         if (resp.data[0] == TOUCH) {
             //printHexDump(resp.data, resp.len, 16);
@@ -313,9 +324,10 @@ void MainThread::actionMode(respData resp) {
             uint16_t y = (resp.data[3] << 8) | resp.data[4];
             printf("%d, %d\n", x, y);
             drawRect(COLOR_WHITE, x - 10, y - 10, 20, 20);
-            sendCmd(CMD_SHOW, 1);
+            //sendCmd(CMD_SHOW, 1);
         }
     }
+#endif
 }
 
 MainThread::respData MainThread::checkResponse() {

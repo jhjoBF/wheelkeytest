@@ -20,7 +20,8 @@ private:
         bool crcOk;
     } respData;
 
-    enum { ModeIdle , ModeRainbow, ModePicture, ModeTouch, ModeMax };
+    //enum { ModeIdle , ModeRainbow, ModePicture, ModeTouch, ModeMax };
+    enum { ModeIdle , ModeRainbow, ModePicture, ModeMax };
     enum { Init, Waiting, CheckVersion, Welcome, Runing, };
     enum { HalfNone, HalfUp, HalfRight, HalfDown, HalfLeft };
 
