@@ -1,4 +1,5 @@
 #include <SampleStateMachine.h>
+#include <string.h>
 
 SampleStateMachine::SampleStateMachine()
 :AbstractThread(300)

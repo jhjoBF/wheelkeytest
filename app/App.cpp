@@ -5,12 +5,33 @@
 #include "MainThread.h"
 
 App::App() : AbstractThread(300) {
-    printf("%s, %s:%d #### Start App\n", __FILENAME__, __func__, __LINE__);
 }
 App::~App() {}
 
 void App::makeThreads() {
-    _threads.push_back(new MainThread());
+    MainThread* mainThread = new MainThread();
+
+    // Chair IP 설정 (192.168.0.10 ~ 192.168.0.19)
+    for (int i = 0; i < 10; i++) {
+        char ip[20];
+        sprintf(ip, "192.168.0.%d", 10 + i);
+        mainThread->setChairIp(i, ip);
+    }
+
+    // Chair 개수 설정
+    mainThread->setChairCount(2);
+
+    // Map 추가 (외부에 정의된 Map 배열 사용)
+    extern Maptype Map[];
+    extern const int MapCount;
+    for (int i = 0; i < MapCount; i++) {
+        mainThread->addMap(Map[i]);
+    }
+
+    // Map 시퀀스 시작
+    mainThread->startMapSequence();
+
+    _threads.push_back(mainThread);
 }
 
 void App::startThreads() {
@@ -23,6 +44,78 @@ void App::initialize() {
     startThreads();
 }
 
+void App::initializePosition(int position) {
+    makeThreadsPosition(position);
+    startThreads();
+}
+
+void App::initializeMonitor() {
+    makeThreadsMonitor();
+    startThreads();
+}
+
+void App::initializeStop() {
+    makeThreadsStop();
+    startThreads();
+}
+
+void App::makeThreadsPosition(int position) {
+    MainThread* mainThread = new MainThread();
+
+    // Chair IP 설정 (192.168.0.10 ~ 192.168.0.19)
+    for (int i = 0; i < 10; i++) {
+        char ip[20];
+        sprintf(ip, "192.168.0.%d", 10 + i);
+        mainThread->setChairIp(i, ip);
+    }
+
+    // Chair 개수 설정
+    mainThread->setChairCount(2);
+
+    // 포지션 모드 설정
+    mainThread->setPositionMode(position);
+
+    _threads.push_back(mainThread);
+}
+
+void App::makeThreadsStop() {
+    MainThread* mainThread = new MainThread();
+
+    // Chair IP 설정 (192.168.0.10 ~ 192.168.0.19)
+    for (int i = 0; i < 10; i++) {
+        char ip[20];
+        sprintf(ip, "192.168.0.%d", 10 + i);
+        mainThread->setChairIp(i, ip);
+    }
+
+    // Chair 개수 설정
+    mainThread->setChairCount(2);
+
+    // 정지 모드 설정
+    mainThread->setStopMode(true);
+
+    _threads.push_back(mainThread);
+}
+
+void App::makeThreadsMonitor() {
+    MainThread* mainThread = new MainThread();
+
+    // Chair IP 설정 (192.168.0.10 ~ 192.168.0.19)
+    for (int i = 0; i < 10; i++) {
+        char ip[20];
+        sprintf(ip, "192.168.0.%d", 10 + i);
+        mainThread->setChairIp(i, ip);
+    }
+
+    // Chair 개수 설정
+    mainThread->setChairCount(2);
+
+    // 모니터 모드 설정
+    mainThread->setMonitorMode(true);
+
+    _threads.push_back(mainThread);
+}
+
 void App::finalize() {
     for (const auto& thread : _threads)
         thread->stop();
@@ -31,7 +124,6 @@ void App::finalize() {
         thread->join();
     for (const auto& thread : _threads)
         delete thread;
-    printf("%s, %s:%d #### Finish App\n", __FILENAME__, __func__, __LINE__);
 }
 
 void App::worker() {

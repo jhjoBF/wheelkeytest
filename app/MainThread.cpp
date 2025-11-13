@@ -1,453 +1,526 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <unistd.h>
 #include "MainThread.h"
 #include "Utility.h"
+#include "HttpClient.h"
+#include "JsonParser.h"
 
-#define BUF_SIZE 512
+#define __ 0xff
+Maptype Map[] = {
+  //delay, arm1, arm2, stan, body, leg1, leg2, le1l, le2l, ank1, ank2
+    {0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0},
+    {0,   __,   __,   __,   50,   50,   50,   __,   __,   __,   __},
+    {0,   __,   __,   __,   __,   __,   __,   __,   __,   40,   40},
+    {0,  100,    0,   __,   __,   50,  100,   __,   __,  100,   40},
+    {0,    0,  100,   __,   30,  100,   50,   __,   __,   40,  100},
+};
 
-#define HEAD_CODE               0xaa
-#define CMD_CONNECT             0x01  // 1: Connect, 0: Disconnect
-#define CMD_IMG                 0x02
-#define CMD_FILL_RECT           0x03
-#define CMD_SHOW                0x04  // 1: Display on, 0: Off
-#define CMD_SEND_BIN            0x05
-#define CMD_GET_VERSION         0x06
+const int MapCount = sizeof(Map) / sizeof(Maptype);
 
-#define RESP_CODE               0xff
-#define RESP_ACK                0xfe
-#define RESP_NACK_CHECKSUM      0xfd
-#define RESP_NACK_NOTSUPPORT    0xfc
-#define RESP_NACK_INUSE         0xfb
-#define RESP_NACK_DICONNECTED   0xfa
+Chair::Chair() {
+    _online = false;
+    _run = 0;
+    _arm1 = 0;
+    _arm2 = 0;
+    _stan = 0;
+    _body = 0;
+    _leg1 = 0;
+    _leg2 = 0;
+    _le1l = 0;
+    _le2l = 0;
+    _ank1 = 0;
+    _ank2 = 0;
+}
+Chair::~Chair() {}
 
-#define RESP_VERSION            0xf1
-#define RESP_ACTION             0xf2
-#define RESP_DISPLAY_COMPLETE   0xf3
+void Chair::print() const {
+    const char* status = _online ? "ON " : "OFF";
+    const char* runStatus = _run ? "RUN" : "STP";
 
-#define SHORT_PUSH              0x01
-#define LONG_PUSH               0x02
-#define WHEEL_LEFT              0x03
-#define WHEEL_RIGHT             0x04
-#if USE_TOUCH
-#define TOUCH                   0x05
-#define TOUCH_LONG              0x06
-#define TOUCH_LEFT              0x07
-#define TOUCH_RIGHT             0x08
-#define TOUCH_UP                0x09
-#define TOUCH_DOWN              0x0a
-#endif
+    printf("%-10s %-15s [%3s] [%3s] ARM:%3d/%3d STAN:%3d BODY:%3d LEG:%3d/%3d LE:%3d/%3d ANK:%3d/%3d\n",
+           _id.c_str(), _ip.c_str(), status, runStatus,
+           _arm1, _arm2, _stan, _body, _leg1, _leg2, _le1l, _le2l, _ank1, _ank2);
+}
 
-//#define WIDTH_MAX   466
-#define WIDTH_MAX   320
+MainThread::MainThread() : AbstractThread(50) {
+    _currentChairIndex = 0;
+    _chairCount = 0;
+    _updateCounter = 0;
+    _currentMapIndex = 0;
+    _mapState = MapState::IDLE;
+    _delayStartTime = 0;
+    _waitRunStartTime = 0;
 
-#define COLOR_BLACK 0x0000
-#define COLOR_WHITE 0xffff
-const uint16_t colorCode[7] = {0xf800, 0xfc60, 0xffe0, 0x0400, 0x00001f, 0x4810, 0x8010};
+    // 모드 초기화
+    _monitorMode = false;
+    _positionMode = false;
+    _positionValue = 0;
+    _positionSent = false;
+    _stopMode = false;
+    _stopSent = false;
 
-MainThread::MainThread() : AbstractThread(100), _state(Init) {
-    printf("%s, %s:%d Create\n", __FILENAME__, __func__, __LINE__);
+    // 마지막 보낸 Map 초기화
+    memset(&_lastSentMap, 0, sizeof(_lastSentMap));
+    memset(_chairEverRan, 0, sizeof(_chairEverRan));
 }
 MainThread::~MainThread() {}
-void MainThread::preRun() { uartInit(); }
+
+void MainThread::setChairIp(int index, const std::string& ip) {
+    if (index >= 0 && index < 10) {
+        _dev[index].setIp(ip);
+    }
+}
+
+void MainThread::setChairCount(int count) {
+    if (count >= 0 && count <= 10) {
+        _chairCount = count;
+    }
+}
+
+void MainThread::setPositionMode(int position) {
+    _positionMode = true;
+    _positionValue = position;
+    _positionSent = false;
+}
+
+void MainThread::setMonitorMode(bool monitor) {
+    _monitorMode = monitor;
+}
+
+void MainThread::setStopMode(bool stop) {
+    _stopMode = stop;
+    _stopSent = false;
+}
+
+// 값이 255이면 "__", 아니면 숫자로 포맷팅
+static std::string formatValue(int value) {
+    if (value == 255) {
+        return "__";
+    }
+    char buf[8];
+    sprintf(buf, "%2d", value);
+    return std::string(buf);
+}
+
+void MainThread::printAllChairs() {
+    // 터미널 클리어 (ANSI escape code)
+    printf("\033[2J\033[H");
+
+    // 모드에 따른 헤더 표시
+    if (_positionMode) {
+        printf("========== POSITION MODE (n=%d) ==========\n", _positionValue);
+    } else if (_stopMode) {
+        printf("========== STOP MODE ==========\n");
+    } else if (_monitorMode) {
+        printf("========== MONITOR MODE ==========\n");
+    } else if (_mapState != MapState::IDLE && !_maps.empty()) {
+        // Map 진행 상황 표시
+        size_t displayIndex = _currentMapIndex;
+        if (_mapState == MapState::WAITING_STOP || _mapState == MapState::WAITING_RUN) {
+            // 실행 중일 때는 현재 인덱스 표시
+        } else if (displayIndex > 0) {
+            displayIndex--; // 이전에 보낸 Map 표시
+        }
+
+        printf("========== Map Progress: %zu/%zu ==========\n",
+               displayIndex + 1, _maps.size());
+        printf("Current Map: %-29s ARM:%3s/%3s STAN:%3s BODY:%3s LEG:%3s/%3s LE:%3s/%3s ANK:%3s/%3s\n", " ",
+               formatValue(_lastSentMap._arm1).c_str(), formatValue(_lastSentMap._arm2).c_str(),
+               formatValue(_lastSentMap._stan).c_str(), formatValue(_lastSentMap._body).c_str(),
+               formatValue(_lastSentMap._leg1).c_str(), formatValue(_lastSentMap._leg2).c_str(),
+               formatValue(_lastSentMap._le1l).c_str(), formatValue(_lastSentMap._le2l).c_str(),
+               formatValue(_lastSentMap._ank1).c_str(), formatValue(_lastSentMap._ank2).c_str());
+        printf("===========================================\n");
+    } else {
+        printf("========== CES Chair Status ==========\n");
+    }
+
+    for (int i = 0; i < _chairCount; i++) {
+        printf("[%d] ", i);
+        _dev[i].print();
+    }
+    printf("======================================\n");
+    fflush(stdout);
+}
+
+bool MainThread::updateChairData(int index) {
+    if (index < 0 || index >= 10) {
+        return false;
+    }
+
+    std::string ip = _dev[index].getIp();
+    if (ip.empty()) {
+        return false;
+    }
+
+    // HTTP GET 요청
+    HttpClient client;
+    client.setTimeout(1);
+
+    std::string url = "http://" + ip + "/v1/api/ces/info";
+    std::string response;
+
+    if (!client.get(url, response)) {
+        _dev[index].setOnline(false);
+        printf("[ERROR] Chair[%d] %s - Connection failed\n", index, ip.c_str());
+        return false;
+    }
+
+    // JSON 파싱
+    JsonParser parser(response);
+    if (!parser.parse()) {
+        _dev[index].setOnline(false);
+        printf("[ERROR] Chair[%d] %s - JSON parse failed\n", index, ip.c_str());
+        return false;
+    }
+
+    // Chair 데이터 업데이트
+    _dev[index].setOnline(true);
+    _dev[index].setId(parser.getString("id", ""));
+    _dev[index].setRun(parser.getInt("run", 0));
+    _dev[index].setArm1(parser.getInt("arm1", 0));
+    _dev[index].setArm2(parser.getInt("arm2", 0));
+    _dev[index].setStan(parser.getInt("stan", 0));
+    _dev[index].setBody(parser.getInt("body", 0));
+    _dev[index].setLeg1(parser.getInt("leg1", 0));
+    _dev[index].setLeg2(parser.getInt("leg2", 0));
+    _dev[index].setLe1l(parser.getInt("le1l", 0));
+    _dev[index].setLe2l(parser.getInt("le2l", 0));
+    _dev[index].setAnk1(parser.getInt("ank1", 0));
+    _dev[index].setAnk2(parser.getInt("ank2", 0));
+
+    return true;
+}
+
+void MainThread::preRun() {}
 void MainThread::postRun() {}
 
-uint8_t MainThread::checkPacketLenth(std::queue<uint8_t> q) {
-    q.pop();  // HEAD_CODE
-    q.pop();  // COMMAND
-    return q.front();  // LENGTH
-}
-
 void MainThread::worker() {
-    respData resp;
-    uint8_t c;
-    uint8_t packetlen;
-
-    if (_state == Init) {
-        printf(">> Connect\n");
-        sendCmd(CMD_CONNECT, 1);
-        _state = Waiting;
-        _nextState = CheckVersion;
-    }
-    else if (_state == CheckVersion) {
-        uint8_t value = 0;
-        printf(">> Check version\n");
-        sendCmd(CMD_GET_VERSION, 0);
-        _state = Waiting;
-        _nextState = Welcome;
-    }
-    else if (_state == Welcome) {
-        showImage(0, 0, 0);
-        //sendCmd(CMD_SHOW, 1);
-        _state = Runing;
-    }
-
-    readUartData();
-    while (_rxQueue.size() >= 5) {
-        c = _rxQueue.front();
-        if (c != HEAD_CODE) {
-            _rxQueue.pop();
-            printf(".");
-            //printf("drop 0x%x\n", c);
-            return;
-        }
-        packetlen = checkPacketLenth(_rxQueue);
-        packetlen += 4;  // HEAD_CODE, COMMAND, LENGTH, ..., CHECKSUM
-        if (_rxQueue.size() < packetlen) {
-            printf(",");
-            return;
-        }
-        resp = checkResponse();
-        if (!resp.crcOk) continue;
-        if (resp.code == RESP_VERSION) {
-            printf("Version : %s\n", resp.data);
-        }
-        else if (resp.code == RESP_ACTION) {
-            actionMode(resp);
-        }
-        else if (resp.code == RESP_CODE) {
-            switch (resp.data[0]) {
-                case RESP_ACK: printf("  << OK\n"); break;
-                case RESP_NACK_CHECKSUM: printf("  << NACK checksum\n"); break;
-                case RESP_NACK_NOTSUPPORT: printf("  << NACK not support\n"); break;
-                case RESP_NACK_INUSE: printf("  << NACK inuse\n"); break;
-                case RESP_NACK_DICONNECTED: printf("  << NACK disconnect\n"); break;
-                default: printf("  << Resp code unknown : %d\n", resp.data[0]); break;
-            }
-            if (_state == Waiting) {
-                _state = _nextState;
-            }
-        }
-        else if (resp.code == RESP_DISPLAY_COMPLETE) {
-            printf("  << Display\n");
-            sendCmd(CMD_SHOW, 1);
-        }
-        else {
-            printf("[%02x](%02X) ", resp.code, resp.len);
-            for (int i = 0; i < resp.len; i++) printf("%02x ", resp.data[i]);
-            printf("\n");
-        }
-    }
-}
-
-void MainThread::drawRectHalf(uint8_t mode, uint16_t color) {
-    const uint16_t widthHalf = WIDTH_MAX / 2;
-    if (mode == HalfUp)
-        drawRect(color, 0, 0, WIDTH_MAX, widthHalf);
-    else if (mode == HalfRight)
-        drawRect(color, widthHalf, 0, widthHalf, WIDTH_MAX);
-    else if (mode == HalfDown)
-        drawRect(color, 0, widthHalf, WIDTH_MAX, widthHalf);
-    else if (mode == HalfLeft)
-        drawRect(color, 0, 0, widthHalf, WIDTH_MAX);
-}
-
-void MainThread::actionMode(respData resp) {
-    static int mode = ModeIdle;
-    static int idx = 0;
-    static uint8_t halfMode = HalfNone;
-
-    if (resp.data[0] == SHORT_PUSH) {
-        mode++;
-        if (mode >= ModeMax)
-            mode = ModeIdle;
-        printf("Mode changed : %d\n", mode);
-        idx = 0;
-
-        switch (mode) {
-            case ModeIdle:
-                showImage(0, 0, 0);
-                //sendCmd(CMD_SHOW, 1);
-                break;
-            case ModeRainbow:
-                halfMode = HalfNone;
-                drawRect(colorCode[idx], 0, 0, WIDTH_MAX, WIDTH_MAX);
-                //sendCmd(CMD_SHOW, 1);
-                break;
-            case ModePicture:
-                idx = 1;
-                halfMode = HalfNone;
-                showImage(idx, 0, 0);
-                //sendCmd(CMD_SHOW, 1);
-                break;
-#if USE_TOUCH
-            case ModeTouch:
-                drawRect(COLOR_BLACK, 0, 0, WIDTH_MAX, WIDTH_MAX);
-                //sendCmd(CMD_SHOW, 1);
-#endif
-            default:
-                printf("Mode error: %d\n", mode);
-                break;
-        }
+    // chairCount가 설정되지 않았으면 아무것도 하지 않음
+    if (_chairCount == 0) {
         return;
     }
 
-    if (mode == ModeRainbow) {
-        switch (resp.data[0]) {
-        case WHEEL_LEFT:
-            if (halfMode) {
-                halfMode--;
-                if (halfMode == HalfNone) halfMode = HalfLeft;
-                drawRectHalf(halfMode, colorCode[idx]);
-                //sendCmd(CMD_SHOW, 1);
+    // 포지션 모드: 한 번만 전송
+    if (_positionMode && !_positionSent) {
+        sendPositionToAllChairs();
+        _positionSent = true;
+        printf("[INFO] Position %d sent to all chairs. Press Ctrl+C to exit.\n", _positionValue);
+    }
+
+    // 정지 모드: 한 번만 전송
+    if (_stopMode && !_stopSent) {
+        sendStopToAllChairs();
+        _stopSent = true;
+        printf("[INFO] Stop command sent to all chairs. Press Ctrl+C to exit.\n");
+    }
+
+    // 병렬로 모든 Chair 업데이트
+    std::vector<std::thread> threads;
+
+    for (int i = 0; i < _chairCount; i++) {
+        std::string ip = _dev[i].getIp();
+        if (!ip.empty()) {
+            threads.push_back(std::thread([this, i]() {
+                updateChairData(i);
+            }));
+        }
+    }
+
+    // 모든 스레드가 완료될 때까지 대기
+    for (auto& t : threads) {
+        if (t.joinable()) {
+            t.join();
+        }
+    }
+
+    // 모니터 모드가 아니면 Map 시퀀스 처리
+    if (!_monitorMode && !_positionMode && !_stopMode) {
+        processMapSequence();
+    }
+
+    // 모든 업데이트 완료 후 상태 출력
+    _updateCounter++;
+    printAllChairs();
+}
+
+// Map 관리 메서드
+void MainThread::addMap(const Maptype& map) {
+    _maps.push_back(map);
+}
+
+void MainThread::startMapSequence() {
+    if (_maps.empty()) {
+        printf("[INFO] No maps to execute\n");
+        return;
+    }
+    _currentMapIndex = 0;
+    _mapState = MapState::DELAYING;
+    _delayStartTime = time(NULL);
+    printf("[INFO] Starting map sequence with %zu maps\n", _maps.size());
+}
+
+void MainThread::stopMapSequence() {
+    _mapState = MapState::IDLE;
+    printf("[INFO] Map sequence stopped\n");
+}
+
+// Chair에 Map 명령 전송
+bool MainThread::sendMapToChair(int chairIndex, const Maptype& map) {
+    if (chairIndex < 0 || chairIndex >= _chairCount) {
+        return false;
+    }
+
+    std::string ip = _dev[chairIndex].getIp();
+    if (ip.empty()) {
+        return false;
+    }
+
+    // URL 생성
+    char url[512];
+    sprintf(url, "http://%s/v1/api/ces/set?arm1=%d&arm2=%d&stan=%d&body=%d&leg1=%d&leg2=%d&le1l=%d&le2l=%d&ank1=%d&ank2=%d",
+            ip.c_str(), map._arm1, map._arm2, map._stan, map._body,
+            map._leg1, map._leg2, map._le1l, map._le2l, map._ank1, map._ank2);
+
+    // HTTP GET 요청
+    HttpClient client;
+    client.setTimeout(1);
+    std::string response;
+
+    if (!client.get(url, response)) {
+        printf("[ERROR] Failed to send map to Chair[%d] %s\n", chairIndex, ip.c_str());
+        return false;
+    }
+
+    return true;
+}
+
+// 모든 Chair가 RUN 상태인지 확인 (개선된 버전)
+bool MainThread::allChairsRunning() {
+    // 각 Chair의 run 상태 확인 및 기록
+    for (int i = 0; i < _chairCount; i++) {
+        if (_dev[i].isOnline()) {
+            if (_dev[i].getRun() != 0) {
+                _chairEverRan[i] = true;  // 한번이라도 run 상태가 되면 기록
             }
-            else {
-                if (idx > 0) {
-                    idx--;
-                    drawRect(colorCode[idx], 0, 0, WIDTH_MAX, WIDTH_MAX);
-                    //sendCmd(CMD_SHOW, 1);
+        }
+    }
+
+    // 모든 온라인 Chair가 run 상태이거나, 한번이라도 run 상태였으면 OK
+    for (int i = 0; i < _chairCount; i++) {
+        if (_dev[i].isOnline()) {
+            // run 중이거나, 이전에 run 상태였던 적이 있으면 OK
+            if (_dev[i].getRun() == 0 && !_chairEverRan[i]) {
+                return false;  // 아직 run 상태가 안되고 이전에도 안됐음
+            }
+        }
+    }
+
+    return true;
+}
+
+// 모든 Chair가 STOP 상태인지 확인
+bool MainThread::allChairsStopped() {
+    for (int i = 0; i < _chairCount; i++) {
+        if (_dev[i].isOnline()) {
+            // 한번이라도 run 상태였던 Chair만 체크
+            if (_chairEverRan[i] && _dev[i].getRun() != 0) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// Map 시퀀스 처리
+void MainThread::processMapSequence() {
+    if (_mapState == MapState::IDLE || _maps.empty()) {
+        return;
+    }
+
+    if (_currentMapIndex >= _maps.size()) {
+        printf("[INFO] All maps completed!\n");
+        _mapState = MapState::IDLE;
+        return;
+    }
+
+    Maptype& currentMap = _maps[_currentMapIndex];
+
+    switch (_mapState) {
+        case MapState::DELAYING:
+            {
+                time_t elapsed = time(NULL) - _delayStartTime;
+                if (elapsed >= currentMap.delay) {
+                    printf("[INFO] Sending map %zu/%zu to all chairs\n", _currentMapIndex + 1, _maps.size());
+                    _mapState = MapState::SENDING;
                 }
             }
             break;
-        case WHEEL_RIGHT:
-            if (halfMode) {
-                if (halfMode == HalfLeft) halfMode = HalfUp;
-                else halfMode++;
-                drawRectHalf(halfMode, colorCode[idx]);
-                //sendCmd(CMD_SHOW, 1);
+
+        case MapState::SENDING:
+            {
+                // 마지막 보낸 Map 저장
+                _lastSentMap = currentMap;
+
+                // chairEverRan 초기화
+                memset(_chairEverRan, 0, sizeof(_chairEverRan));
+
+                // 모든 Chair에 명령 전송 (병렬)
+                std::vector<std::thread> threads;
+                for (int i = 0; i < _chairCount; i++) {
+                    threads.push_back(std::thread([this, i, &currentMap]() {
+                        sendMapToChair(i, currentMap);
+                    }));
+                }
+
+                for (auto& t : threads) {
+                    if (t.joinable()) {
+                        t.join();
+                    }
+                }
+
+                printf("[INFO] Waiting for all chairs to start running...\n");
+                _waitRunStartTime = time(NULL);
+                _mapState = MapState::WAITING_RUN;
             }
-            else {
-                if (idx < 6) {
-                    idx++;
-                    drawRect(colorCode[idx], 0, 0, WIDTH_MAX, WIDTH_MAX);
-                    //sendCmd(CMD_SHOW, 1);
+            break;
+
+        case MapState::WAITING_RUN:
+            {
+                time_t elapsed = time(NULL) - _waitRunStartTime;
+
+                // 2초 타임아웃: 2초 안에 run 상태가 안되면 이미 목표 위치에 있다고 간주
+                if (elapsed >= 2 || allChairsRunning()) {
+                    if (elapsed >= 2) {
+                        printf("[INFO] Timeout waiting for run state (some chairs already at target position)\n");
+                    } else {
+                        printf("[INFO] All chairs are running, waiting for completion...\n");
+                    }
+                    _mapState = MapState::WAITING_STOP;
                 }
             }
             break;
-#if USE_TOUCH
-        case TOUCH:
-            if (halfMode)
-                halfMode = HalfNone;
-            else
-                if (++idx > 6) idx = 0;
-            drawRect(colorCode[idx], 0, 0, WIDTH_MAX, WIDTH_MAX);
-            //sendCmd(CMD_SHOW, 1);
+
+        case MapState::WAITING_STOP:
+            if (allChairsStopped()) {
+                printf("[INFO] All chairs completed map %zu\n", _currentMapIndex + 1);
+                _currentMapIndex++;
+
+                // 맵이 끝까지 실행되면 처음부터 다시 반복
+                if (_currentMapIndex >= _maps.size()) {
+                    _currentMapIndex = 0;
+                    printf("[INFO] All maps completed! Restarting from first map...\n");
+                }
+
+                _mapState = MapState::DELAYING;
+                _delayStartTime = time(NULL);
+            }
             break;
-        case TOUCH_LEFT:
-            halfMode = HalfLeft;
-            drawRectHalf(halfMode, colorCode[idx]);
-            //sendCmd(CMD_SHOW, 1);
-            break;
-        case TOUCH_RIGHT:
-            halfMode = HalfRight;
-            drawRectHalf(halfMode, colorCode[idx]);
-            //sendCmd(CMD_SHOW, 1);
-            break;
-        case TOUCH_UP:
-            halfMode = HalfUp;
-            drawRectHalf(halfMode, colorCode[idx]);
-            //sendCmd(CMD_SHOW, 1);
-            break;
-        case TOUCH_DOWN:
-            halfMode = HalfDown;
-            drawRectHalf(halfMode, colorCode[idx]);
-            //sendCmd(CMD_SHOW, 1);
-            break;
-#endif
+
         default:
-            printf("unknown cmd 0x%x\n", resp.data[0]);
             break;
+    }
+}
+
+// 포지션 명령을 Chair에 전송
+bool MainThread::sendPositionToChair(int chairIndex, int position) {
+    if (chairIndex < 0 || chairIndex >= _chairCount) {
+        return false;
+    }
+
+    std::string ip = _dev[chairIndex].getIp();
+    if (ip.empty()) {
+        return false;
+    }
+
+    // URL 생성
+    char url[256];
+    sprintf(url, "http://%s/v1/api/ces/pos?n=%d", ip.c_str(), position);
+
+    // HTTP GET 요청
+    HttpClient client;
+    client.setTimeout(2);
+    std::string response;
+
+    if (!client.get(url, response)) {
+        printf("[ERROR] Failed to send position to Chair[%d] %s\n", chairIndex, ip.c_str());
+        return false;
+    }
+
+    printf("[INFO] Position %d sent to Chair[%d] %s\n", position, chairIndex, ip.c_str());
+    return true;
+}
+
+// 모든 Chair에 포지션 명령 전송
+void MainThread::sendPositionToAllChairs() {
+    printf("[INFO] Sending position %d to all chairs...\n", _positionValue);
+
+    std::vector<std::thread> threads;
+
+    for (int i = 0; i < _chairCount; i++) {
+        threads.push_back(std::thread([this, i]() {
+            sendPositionToChair(i, _positionValue);
+        }));
+    }
+
+    for (auto& t : threads) {
+        if (t.joinable()) {
+            t.join();
         }
     }
-    else if (mode == ModePicture) {
-        switch (resp.data[0]) {
-            case WHEEL_LEFT:
-                if (halfMode) {
-                    halfMode--;
-                    if (halfMode == HalfNone) halfMode = HalfLeft;
-                    showImage(idx, 0, 0);
-                    drawRectHalf(halfMode, COLOR_BLACK);
-                    //sendCmd(CMD_SHOW, 1);
-                }
-                else if (idx > 1) {
-                    idx--;
-                    showImage(idx, 0, 0);
-                    //sendCmd(CMD_SHOW, 1);
-                }
-                break;
-            case WHEEL_RIGHT:
-                if (halfMode) {
-                    if (halfMode == HalfLeft) halfMode = HalfUp;
-                    else halfMode++;
-                    showImage(idx, 0, 0);
-                    drawRectHalf(halfMode, COLOR_BLACK);
-                    //sendCmd(CMD_SHOW, 1);
-                } else if (idx < 7) {
-                    idx++;
-                    showImage(idx, 0, 0);
-                    //sendCmd(CMD_SHOW, 1);
-                }
-                break;
-#if USE_TOUCH
-            case TOUCH:
-                if (halfMode)
-                    halfMode = HalfNone;
-                else
-                    if (++idx > 7) idx = 1;
-                showImage(idx, 0, 0);
-                //sendCmd(CMD_SHOW, 1);
-                break;
-            case TOUCH_LEFT:
-                halfMode = HalfRight;
-                showImage(idx, 0, 0);
-                drawRectHalf(halfMode, COLOR_BLACK);
-                //sendCmd(CMD_SHOW, 1);
-                break;
-            case TOUCH_RIGHT:
-                halfMode = HalfLeft;
-                showImage(idx, 0, 0);
-                drawRectHalf(halfMode, COLOR_BLACK);
-                //sendCmd(CMD_SHOW, 1);
-                break;
-            case TOUCH_UP:
-                halfMode = HalfDown;
-                showImage(idx, 0, 0);
-                drawRectHalf(halfMode, COLOR_BLACK);
-                //sendCmd(CMD_SHOW, 1);
-                break;
-            case TOUCH_DOWN:
-                halfMode = HalfUp;
-                showImage(idx, 0, 0);
-                drawRectHalf(halfMode, COLOR_BLACK);
-                //sendCmd(CMD_SHOW, 1);
-                break;
-#endif
-            default:
-                printf("ModePicture unknown : %d\n", resp.data[0]);
-                break;
+
+    printf("[INFO] Position command sent to all chairs\n");
+}
+
+// 정지 명령을 Chair에 전송
+bool MainThread::sendStopToChair(int chairIndex) {
+    if (chairIndex < 0 || chairIndex >= _chairCount) {
+        return false;
+    }
+
+    std::string ip = _dev[chairIndex].getIp();
+    if (ip.empty()) {
+        return false;
+    }
+
+    // URL 생성 (stop 명령)
+    char url[256];
+    sprintf(url, "http://%s/v1/api/ces/stop", ip.c_str());
+
+    // HTTP GET 요청
+    HttpClient client;
+    client.setTimeout(2);
+    std::string response;
+
+    if (!client.get(url, response)) {
+        printf("[ERROR] Failed to send stop to Chair[%d] %s\n", chairIndex, ip.c_str());
+        return false;
+    }
+
+    printf("[INFO] Stop command sent to Chair[%d] %s\n", chairIndex, ip.c_str());
+    return true;
+}
+
+// 모든 Chair에 정지 명령 전송
+void MainThread::sendStopToAllChairs() {
+    printf("[INFO] Sending stop command to all chairs...\n");
+
+    std::vector<std::thread> threads;
+
+    for (int i = 0; i < _chairCount; i++) {
+        threads.push_back(std::thread([this, i]() {
+            sendStopToChair(i);
+        }));
+    }
+
+    for (auto& t : threads) {
+        if (t.joinable()) {
+            t.join();
         }
     }
-#if USE_TOUCH
-    else if (mode == ModeTouch) {
-        if (resp.data[0] == TOUCH) {
-            //printHexDump(resp.data, resp.len, 16);
-            uint16_t x = (resp.data[1] << 8) | resp.data[2];
-            uint16_t y = (resp.data[3] << 8) | resp.data[4];
-            printf("%d, %d\n", x, y);
-            drawRect(COLOR_WHITE, x - 10, y - 10, 20, 20);
-            //sendCmd(CMD_SHOW, 1);
-        }
-    }
-#endif
-}
 
-MainThread::respData MainThread::checkResponse() {
-    respData ret;
-    uint8_t c = 0;
-    uint8_t checksum = 0;
-
-    memset(&ret, 0, sizeof(respData));
-    c = _rxQueue.front();
-    _rxQueue.pop();
-
-    /*if (c != HEAD_CODE) {
-        printf("HEAD_CODE Error : ");
-        while (!_rxQueue.empty()) {
-            printf("%d", _rxQueue.front());
-            _rxQueue.pop();
-        }
-        printf("\n");
-        exit(1);
-    }*/
-
-    ret.code = _rxQueue.front();
-    _rxQueue.pop();
-    checksum += ret.code;
-
-    ret.len = _rxQueue.front();
-    _rxQueue.pop();
-    checksum += ret.len;
-
-    for (int i = 0; i < ret.len; i++) {
-        ret.data[i] = _rxQueue.front();
-        _rxQueue.pop();
-        checksum += ret.data[i];
-    }
-
-    checksum ^= 0xff;
-    c = _rxQueue.front();
-    _rxQueue.pop();
-    if (checksum == c) {
-        ret.crcOk = true;
-    } else {
-        ret.crcOk = false;
-        printf("CHECKSUM Error : 0x%02x, 0x%02x\n", checksum, c);
-        //exit(1);
-    }
-
-    return ret;
-}
-
-void MainThread::uartInit() {
-    printf("%s, %s:%d\n", __FILENAME__, __func__, __LINE__);
-    _uart.create("/dev/ttyUSB0");
-    _uart.setOption(115200, 8, 1, "NONE");
-}
-
-int MainThread::readUartData() {
-    uint8_t buf[BUF_SIZE] = {0,};
-    int len = 0;
-    len = _uart.read((char*)buf, BUF_SIZE, 0);
-    if (len > 0) {
-        for (int i = 0; i < len; i++) _rxQueue.push(buf[i]);
-    }
-    else if (len < 0 ) {
-        exit(1);
-    }
-    return len;
-}
-
-uint8_t MainThread::getCheckSum(uint8_t* data, uint16_t len) {
-    uint16_t checksum = 0;
-    for (uint16_t i = 1; i < len; i++)
-        checksum += data[i];
-    checksum ^= 0xff;
-    return (uint8_t)checksum;
-}
-
-void MainThread::sendCmd(uint8_t cmd, uint8_t data) {
-    uint8_t buf[BUF_SIZE] = {0,};
-    uint8_t idx = 0;
-    buf[idx++] = HEAD_CODE;
-    buf[idx++] = cmd;
-    buf[idx++] = 0x1;
-    buf[idx++] = data;
-    buf[idx++] = getCheckSum(buf, idx);
-    _uart.write((char*)buf, idx);
-}
-void MainThread::showImage(uint16_t id, uint16_t x, uint16_t y) {
-    uint8_t buf[BUF_SIZE] = {0,};
-    uint8_t idx = 0;
-    buf[idx++] = HEAD_CODE;
-    buf[idx++] = CMD_IMG;
-    buf[idx++] = 0x6;   // one image 6Byte;
-    buf[idx++] = (id >> 8) & 0xff;
-    buf[idx++] = id & 0xff;
-    buf[idx++] = (x >> 8) & 0xff;
-    buf[idx++] = x & 0xff;
-    buf[idx++] = (y >> 8) & 0xff;
-    buf[idx++] = y & 0xff;
-    buf[idx++] = getCheckSum(buf, idx);
-    _uart.write((char*)buf, idx);
-}
-
-void MainThread::drawRect(uint16_t color, uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
-    uint8_t buf[BUF_SIZE] = {0,};
-    uint8_t idx = 0;
-    buf[idx++] = HEAD_CODE;
-    buf[idx++] = CMD_FILL_RECT;
-    buf[idx++] = 0x0A;
-    buf[idx++] = (color >> 8) & 0xff;
-    buf[idx++] = color & 0xff;
-    buf[idx++] = (x >> 8) & 0xff;
-    buf[idx++] = x & 0xff;
-    buf[idx++] = (y >> 8) & 0xff;
-    buf[idx++] = y & 0xff;
-    buf[idx++] = (width >> 8) & 0xff;
-    buf[idx++] = width & 0xff;
-    buf[idx++] = (height >> 8) & 0xff;
-    buf[idx++] = height & 0xff;
-    buf[idx++] = getCheckSum(buf, idx);
-    _uart.write((char*)buf, idx);
+    printf("[INFO] Stop command sent to all chairs\n");
 }
