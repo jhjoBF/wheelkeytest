@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <cstring>
+#include <cstdio>
 #include "App.h"
 #include "MainThread.h"
 

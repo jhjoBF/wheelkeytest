@@ -3,7 +3,7 @@
 
 #include "IBuffering.h"
 #include "Date.h"
-#include "Time.h"
+#include "SeedTime.h"
 #include "IComparable.h"
 
 class DateTime : public IBuffering, public IComparable<DateTime> {

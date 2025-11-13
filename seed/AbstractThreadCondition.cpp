@@ -1,4 +1,5 @@
 #include "AbstractThreadCondition.h"
+#include <cstdio>
 
 AbstractThreadCondition::AbstractThreadCondition(int milliSeconds)
     : _stop(true), _wakeUp(false),

@@ -1,4 +1,6 @@
 #include <cstring>
+#include <cstdio>
+#include <cstdlib>
 #include <unistd.h>
 #include "MainThread.h"
 #include "Utility.h"

@@ -1,6 +1,7 @@
 #include <cassert>
-#include <stdio.h>
-#include "Time.h"
+#include <cstdio>
+#include <ctime>
+#include "SeedTime.h"
 
 Time::Time()
     : _time(0) {}

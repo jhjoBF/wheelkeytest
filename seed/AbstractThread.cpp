@@ -1,5 +1,6 @@
 #include "AbstractThread.h"
 #include <cstring>
+#include <cstdio>
 
 AbstractThread::AbstractThread(int milliSeconds)
     : _stop(true), _milliSeconds(milliSeconds), _defaultSeconds(milliSeconds) {}

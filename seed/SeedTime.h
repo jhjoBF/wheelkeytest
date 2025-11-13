@@ -1,8 +1,8 @@
-#ifndef TIME_H_
-#define TIME_H_
+#ifndef SEEDTIME_H_
+#define SEEDTIME_H_
 
-#include <time.h>
 #include <chrono>
+#include <cstdint>
 
 using systemc = std::chrono::system_clock;
 using steadyc = std::chrono::steady_clock;
@@ -40,4 +40,4 @@ public:
     void print();
 };
 
-#endif  // TIME_H_
+#endif  // SEEDTIME_H_

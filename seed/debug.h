@@ -4,7 +4,8 @@
 #include <iostream>
 #include <iomanip>
 #include <cstring>
-#include <time.h>
+#include <ctime>
+#include <cstdio>
 
 #define DEBUG_BUF_SIZE 256
 #define FILE_NAME_LEN  16
