@@ -10,12 +10,27 @@
 
 #define __ 0xff
 Maptype Map[] = {
-  //delay, arm1, arm2, stan, body, leg1, leg2, le1l, le2l, ank1, ank2
-    {0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0},
-    {0,   __,   __,   __,   50,   50,   50,   __,   __,   __,   __},
-    {0,   __,   __,   __,   __,   __,   __,   __,   __,   40,   40},
-    {0,  100,    0,   __,   __,   50,  100,   __,   __,  100,   40},
-    {0,    0,  100,   __,   30,  100,   50,   __,   __,   40,  100},
+//delay, arm1, arm2, stan, body, leg1, leg2, le1l, le2l, ank1, ank2
+    { 0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0 }, // 1. 준비
+    { 0,    0,    0,   70,    0,   35,   35,    0,    0,   50,   50 }, // 2. 일어서
+    { 1,  100,   __,  100,   __,   __,   __,   __,   __,   __,   __ }, // 3. 왼팔 파도
+    { 1,   __,  100,   __,   __,   __,   __,   __,   __,   __,   __ }, // 4. 오른팔 파도
+    { 0,   50,   50,   __,   __,   __,   __,   __,   __,   __,   __ }, // 5. 팔 나란히
+    { 0,   95,    2,   __,   __,   __,   90,   __,   __,   80,    0 }, // 6. 팔다리 엇갈리기
+    { 0,    2,   95,   __,   __,   90,   40,   __,   __,    0,   80 }, // 7. 팔다리 엇갈리기
+    { 0,   95,    2,   __,   70,   60,   90,   __,   __,  100,    0 }, // 8. 누우며 엇갈리기
+    { 0,    2,   95,   __,   __,   90,   60,   __,   __,    0,  100 }, // 9. 누우며 엇갈리기
+    { 0,   __,    5,    0,   __,   60,   60,   60,   60,   50,   50 }, // 10. 누우며 자세 정렬
+    { 1,   95,   95,   __,  100,   10,   10,   90,   90,  100,  100 }, // 11. 전신 스트레칭
+    { 0,   50,   50,   __,   __,   60,   60,   50,   50,   50,   50 }, // 12. 양팔 위로 다리 평행
+    { 0,   95,    2,  100,   __,   __,   __,   10,   90,   __,   __ }, // 13. 공중부양 다리 쭉쭉이 팔 엇갈리기
+    { 0,   __,   __,   __,   __,   __,   __,   __,   __,    0,  100 }, // 14. 발목 스트레칭
+    { 0,   __,   __,   __,   __,   __,   __,   __,   __,   50,   50 }, // 15. 발목 복귀
+    { 0,    2,   95,   __,   __,   __,   __,   90,   10,   __,   __ }, // 16. 공중부양 다리 쭉쭉이 팔 엇갈리기
+    { 0,   __,   __,   __,   __,   __,   __,   __,   __,  100,    0 }, // 17. 발목 스트레칭
+    { 0,   __,   __,   __,   __,   __,   __,   __,   __,   50,   50 }, // 18. 발목 복귀
+    { 0,   __,    2,    0,   70,   40,   40,   20,   20,   __,   __ }, // 19. 기본 마사지 자세 복귀
+    { 0,   95,   __,   __,   __,   10,   90,   40,   40,   __,   __ }, // 20. 사이클 자세 준비
 };
 
 const int MapCount = sizeof(Map) / sizeof(Maptype);
@@ -258,8 +273,7 @@ void MainThread::startMapSequence() {
         return;
     }
     _currentMapIndex = 0;
-    _mapState = MapState::DELAYING;
-    _delayStartTime = time(NULL);
+    _mapState = MapState::SENDING;  // 첫 Map은 바로 전송
     printf("[INFO] Starting map sequence with %zu maps\n", _maps.size());
 }
 
@@ -280,10 +294,28 @@ bool MainThread::sendMapToChair(int chairIndex, const Maptype& map) {
     }
 
     // URL 생성
-    char url[512];
-    sprintf(url, "http://%s/v1/api/ces/set?arm1=%d&arm2=%d&stan=%d&body=%d&leg1=%d&leg2=%d&le1l=%d&le2l=%d&ank1=%d&ank2=%d",
+    char url1[512];
+    char url2[512];
+    char* url;
+    sprintf(url1, "http://%s/v1/api/ces/set?arm1=%d&arm2=%d&stan=%d&body=%d&leg1=%d&leg2=%d&le1l=%d&le2l=%d&ank1=%d&ank2=%d",
             ip.c_str(), map._arm1, map._arm2, map._stan, map._body,
             map._leg1, map._leg2, map._le1l, map._le2l, map._ank1, map._ank2);
+    sprintf(url2, "http://%s/v1/api/ces/set?arm1=%d&arm2=%d&stan=%d&body=%d&leg1=%d&leg2=%d&le1l=%d&le2l=%d&ank1=%d&ank2=%d",
+            ip.c_str(), map._arm2, map._arm1, map._stan, map._body,
+            map._leg2, map._leg1, map._le2l, map._le1l, map._ank2, map._ank1);
+
+    // IP 주소의 끝자리가 짝수이면 url1, 홀수이면 url2 사용
+    size_t lastDotPos = ip.find_last_of('.');
+    if (lastDotPos != std::string::npos) {
+        int lastOctet = atoi(ip.substr(lastDotPos + 1).c_str());
+        if (lastOctet % 2 == 0) {
+            url = url1;  // 짝수
+        } else {
+            url = url2;  // 홀수
+        }
+    } else {
+        url = url1;  // 기본값
+    }
 
     // HTTP GET 요청
     HttpClient client;
@@ -350,16 +382,6 @@ void MainThread::processMapSequence() {
     Maptype& currentMap = _maps[_currentMapIndex];
 
     switch (_mapState) {
-        case MapState::DELAYING:
-            {
-                time_t elapsed = time(NULL) - _delayStartTime;
-                if (elapsed >= currentMap.delay) {
-                    printf("[INFO] Sending map %zu/%zu to all chairs\n", _currentMapIndex + 1, _maps.size());
-                    _mapState = MapState::SENDING;
-                }
-            }
-            break;
-
         case MapState::SENDING:
             {
                 // 마지막 보낸 Map 저장
@@ -368,17 +390,58 @@ void MainThread::processMapSequence() {
                 // chairEverRan 초기화
                 memset(_chairEverRan, 0, sizeof(_chairEverRan));
 
-                // 모든 Chair에 명령 전송 (병렬)
-                std::vector<std::thread> threads;
-                for (int i = 0; i < _chairCount; i++) {
-                    threads.push_back(std::thread([this, i, &currentMap]() {
-                        sendMapToChair(i, currentMap);
-                    }));
-                }
+                // delay가 0이면 모든 Chair에 동시 전송
+                if (currentMap.delay == 0) {
+                    // 모든 Chair에 명령 전송 (병렬)
+                    std::vector<std::thread> threads;
+                    for (int i = 0; i < _chairCount; i++) {
+                        threads.push_back(std::thread([this, i, &currentMap]() {
+                            sendMapToChair(i, currentMap);
+                        }));
+                    }
 
-                for (auto& t : threads) {
-                    if (t.joinable()) {
-                        t.join();
+                    for (auto& t : threads) {
+                        if (t.joinable()) {
+                            t.join();
+                        }
+                    }
+                } else {
+                    // delay가 0이 아니면 그룹별로 시간차를 두고 전송
+                    // 2개씩 묶어서 그룹화: (0,1), (2,3), (4,5), (6,7), (8,9)
+                    int groupCount = (_chairCount + 1) / 2;  // 그룹 개수 계산
+                    
+                    for (int group = 0; group < groupCount; group++) {
+                        std::vector<std::thread> threads;
+                        
+                        // 각 그룹의 2개 Chair에 명령 전송
+                        int chair1 = group * 2;
+                        int chair2 = group * 2 + 1;
+                        
+                        if (chair1 < _chairCount) {
+                            threads.push_back(std::thread([this, chair1, &currentMap]() {
+                                sendMapToChair(chair1, currentMap);
+                            }));
+                        }
+                        
+                        if (chair2 < _chairCount) {
+                            threads.push_back(std::thread([this, chair2, &currentMap]() {
+                                sendMapToChair(chair2, currentMap);
+                            }));
+                        }
+                        
+                        // 스레드 종료 대기
+                        for (auto& t : threads) {
+                            if (t.joinable()) {
+                                t.join();
+                            }
+                        }
+                        
+                        printf("[INFO] Group %d (Chair %d,%d) sent\n", group, chair1, chair2);
+                        
+                        // 마지막 그룹이 아니면 delay 시간만큼 대기
+                        if (group < groupCount - 1) {
+                            sleep(currentMap.delay);
+                        }
                     }
                 }
 
@@ -409,14 +472,15 @@ void MainThread::processMapSequence() {
                 printf("[INFO] All chairs completed map %zu\n", _currentMapIndex + 1);
                 _currentMapIndex++;
 
+#if 0
                 // 맵이 끝까지 실행되면 처음부터 다시 반복
                 if (_currentMapIndex >= _maps.size()) {
                     _currentMapIndex = 0;
                     printf("[INFO] All maps completed! Restarting from first map...\n");
                 }
+#endif
 
-                _mapState = MapState::DELAYING;
-                _delayStartTime = time(NULL);
+                _mapState = MapState::SENDING;  // 다음 Map 바로 전송
             }
             break;
 
