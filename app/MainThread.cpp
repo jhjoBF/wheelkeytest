@@ -8,6 +8,10 @@
 #include "HttpClient.h"
 #include "JsonParser.h"
 
+#define REPEAT   0 //반복
+#define SYMMETRY 0 //대칭
+#define SURFING  0 //파도타기
+
 #define __ 0xff
 Maptype Map[] = {
 //delay, arm1, arm2, stan, body, leg1, leg2, le1l, le2l, ank1, ank2
@@ -316,6 +320,9 @@ bool MainThread::sendMapToChair(int chairIndex, const Maptype& map) {
     } else {
         url = url1;  // 기본값
     }
+#if !SYMMETRY
+    url = url1;
+#endif
 
     // HTTP GET 요청
     HttpClient client;
@@ -390,6 +397,9 @@ void MainThread::processMapSequence() {
                 // chairEverRan 초기화
                 memset(_chairEverRan, 0, sizeof(_chairEverRan));
 
+#if !SURFING
+                currentMap.delay = 0;
+#endif
                 // delay가 0이면 모든 Chair에 동시 전송
                 if (currentMap.delay == 0) {
                     // 모든 Chair에 명령 전송 (병렬)
@@ -472,7 +482,7 @@ void MainThread::processMapSequence() {
                 printf("[INFO] All chairs completed map %zu\n", _currentMapIndex + 1);
                 _currentMapIndex++;
 
-#if 0
+#if REPEAT
                 // 맵이 끝까지 실행되면 처음부터 다시 반복
                 if (_currentMapIndex >= _maps.size()) {
                     _currentMapIndex = 0;
