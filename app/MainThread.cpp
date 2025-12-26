@@ -2,7 +2,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
-#include <unistd.h>
+#include <thread>
+#include <chrono>
 #include "MainThread.h"
 #include "HttpClient.h"
 #include "JsonParser.h"
@@ -439,7 +440,7 @@ void MainThread::processMapSequence() {
                         
                         // 마지막 그룹이 아니면 delay 시간만큼 대기
                         if (group < groupCount - 1) {
-                            sleep(currentMap.delay);
+                            std::this_thread::sleep_for(std::chrono::seconds(currentMap.delay));
                         }
                     }
                 }

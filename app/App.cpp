@@ -1,4 +1,10 @@
-#include <unistd.h>
+#ifdef _WIN32
+    #include <windows.h>
+    #define usleep(x) Sleep((x)/1000)
+#else
+    #include <unistd.h>
+#endif
+
 #include <cstring>
 #include <cstdio>
 #include "App.h"

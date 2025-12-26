@@ -38,7 +38,11 @@ void AbstractThread::stop() {
 
 bool AbstractThread::join() {
     if (_threadObject.joinable() == true) {
+#ifndef _WIN32
         printf("%s, %s, %d\n", __FILENAME__, __func__, __LINE__);
+#else
+        printf("%s, %d\n", __func__, __LINE__);
+#endif
         _threadObject.join();
         return true;
     }

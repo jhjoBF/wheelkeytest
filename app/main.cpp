@@ -4,12 +4,17 @@
 #include <cstdlib>
 #include <vector>
 #include <signal.h>
-#include <execinfo.h>
+
+#ifndef _WIN32
+    #include <execinfo.h>
+#endif
+
 #include "App.h"
 
 App* gApp = nullptr;
 
 void callTrace() {
+#ifndef _WIN32
     const uint32_t MaxSize = 32;
     void* array[MaxSize];
     size_t size;
@@ -18,24 +23,33 @@ void callTrace() {
     strings = ::backtrace_symbols(array, size);
 
     for (size_t i = 0; i < size; i++) {
-    //for (size_t i = size - 1; i >= 2; i--) {
         fprintf(stderr, "[%2d] : %s\n", (int)i, strings[i]);
     }
     free(strings);
+#else
+    fprintf(stderr, "[INFO] Stack trace not available on Windows\n");
+#endif
 }
 
 void signalHander(int signal) {
+#ifndef _WIN32
     printf("%s %s %d, signal %d\n", __FILENAME__, __func__, __LINE__, signal);
+#else
+    printf("%s %d, signal %d\n", __func__, __LINE__, signal);
+#endif
     if ((signal != SIGTERM) && (signal != SIGINT)) {
         callTrace();
+#ifndef _WIN32
         SIG_DFL(signal);
-        //exit(1);
+#endif
     }
     if (gApp != nullptr) gApp->stop();
 }
 
 void initSignal() {
+#ifndef _WIN32
     signal(SIGPIPE, SIG_IGN);
+#endif
     signal(SIGTERM, signalHander);
     signal(SIGINT, signalHander);
     signal(SIGSEGV, signalHander);

@@ -1,13 +1,37 @@
 #include "HttpClient.h"
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/select.h>
+
+#ifdef _WIN32
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+    #define close closesocket
+    typedef int socklen_t;
+    // MinGW에는 ssize_t가 이미 정의되어 있음
+#else
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+    #include <arpa/inet.h>
+    #include <unistd.h>
+    #include <fcntl.h>
+    #include <sys/select.h>
+#endif
+
 #include <cstring>
 #include <cstdio>
 #include <errno.h>
+
+#ifdef _WIN32
+// Windows Winsock 초기화
+static class WSAInitializer {
+public:
+    WSAInitializer() {
+        WSADATA wsaData;
+        WSAStartup(MAKEWORD(2, 2), &wsaData);
+    }
+    ~WSAInitializer() {
+        WSACleanup();
+    }
+} wsaInit;
+#endif
 
 HttpClient::HttpClient() : _timeout(2) {}
 
@@ -47,21 +71,36 @@ bool HttpClient::parseUrl(const std::string& url, std::string& host, int& port, 
 
 bool HttpClient::connectToHost(const std::string& host, int port, int& sockfd) {
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
+#ifdef _WIN32
+    if (sockfd == INVALID_SOCKET) {
+#else
     if (sockfd < 0) {
+#endif
         printf("[ERROR] Socket creation failed\n");
         return false;
     }
     
-    // 타임아웃 설정 (더 짧게)
+    // 타임아웃 설정
     struct timeval timeout;
     timeout.tv_sec = 0;
     timeout.tv_usec = 500000; // 0.5초
+#ifdef _WIN32
+    DWORD timeoutMs = 500;
+    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeoutMs, sizeof(timeoutMs));
+    setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeoutMs, sizeof(timeoutMs));
+#else
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
     setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+#endif
     
     // 논블로킹 모드 설정
+#ifdef _WIN32
+    u_long mode = 1;
+    ioctlsocket(sockfd, FIONBIO, &mode);
+#else
     int flags = fcntl(sockfd, F_GETFL, 0);
     fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
+#endif
     
     struct sockaddr_in serverAddr;
     memset(&serverAddr, 0, sizeof(serverAddr));
@@ -77,7 +116,11 @@ bool HttpClient::connectToHost(const std::string& host, int port, int& sockfd) {
     // 논블로킹 connect
     int result = connect(sockfd, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
     if (result < 0) {
+#ifdef _WIN32
+        if (WSAGetLastError() != WSAEWOULDBLOCK) {
+#else
         if (errno != EINPROGRESS) {
+#endif
             printf("[ERROR] Connection failed to %s:%d\n", host.c_str(), port);
             close(sockfd);
             return false;
@@ -92,7 +135,11 @@ bool HttpClient::connectToHost(const std::string& host, int port, int& sockfd) {
         tv.tv_sec = 1;
         tv.tv_usec = 0;
         
+#ifdef _WIN32
+        if (select(0, NULL, &fdset, NULL, &tv) <= 0) {
+#else
         if (select(sockfd + 1, NULL, &fdset, NULL, &tv) <= 0) {
+#endif
             printf("[ERROR] Connection timeout to %s:%d\n", host.c_str(), port);
             close(sockfd);
             return false;
@@ -101,7 +148,11 @@ bool HttpClient::connectToHost(const std::string& host, int port, int& sockfd) {
         // 연결 상태 확인
         int error = 0;
         socklen_t len = sizeof(error);
+#ifdef _WIN32
+        if (getsockopt(sockfd, SOL_SOCKET, SO_ERROR, (char*)&error, &len) < 0 || error != 0) {
+#else
         if (getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &error, &len) < 0 || error != 0) {
+#endif
             printf("[ERROR] Connection failed to %s:%d\n", host.c_str(), port);
             close(sockfd);
             return false;
@@ -109,7 +160,12 @@ bool HttpClient::connectToHost(const std::string& host, int port, int& sockfd) {
     }
     
     // 다시 블로킹 모드로 변경
+#ifdef _WIN32
+    u_long mode2 = 0;
+    ioctlsocket(sockfd, FIONBIO, &mode2);
+#else
     fcntl(sockfd, F_SETFL, flags);
+#endif
     
     return true;
 }
