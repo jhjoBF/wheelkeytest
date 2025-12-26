@@ -4,7 +4,6 @@
 #include <ctime>
 #include <unistd.h>
 #include "MainThread.h"
-#include "Utility.h"
 #include "HttpClient.h"
 #include "JsonParser.h"
 

@@ -9,7 +9,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-builtin-macro-redefined -D__FILENAM
 file(GLOB CPP_FILES app/*.cpp seed/*.cpp)
 message(STATUS ${CPP_FILES})
 
-set(LIBS pthread ssl)
+set(LIBS pthread)
 add_executable(cesShow ${CPP_FILES})
 include_directories(seed)
 target_link_libraries(cesShow ${LIBS})
