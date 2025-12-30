@@ -9,32 +9,51 @@
 #include "JsonParser.h"
 
 #define REPEAT   0 //반복
-#define SYMMETRY 0 //대칭
-#define SURFING  0 //파도타기
+#define SYMMETRY 1 //대칭
+#define SURFING  1 //파도타기
 
 #define __ 0xff
 Maptype Map[] = {
-//delay, arm1, arm2, stan, body, leg1, leg2, le1l, le2l, ank1, ank2
-    { 0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0 }, // 1. 준비
-    { 0,    0,    0,   70,    0,   35,   35,    0,    0,   50,   50 }, // 2. 일어서
-    { 1,  100,   __,  100,   __,   __,   __,   __,   __,   __,   __ }, // 3. 왼팔 파도
-    { 1,   __,  100,   __,   __,   __,   __,   __,   __,   __,   __ }, // 4. 오른팔 파도
-    { 0,   50,   50,   __,   __,   __,   __,   __,   __,   __,   __ }, // 5. 팔 나란히
-    { 0,   95,    2,   __,   __,   __,   90,   __,   __,   80,    0 }, // 6. 팔다리 엇갈리기
-    { 0,    2,   95,   __,   __,   90,   40,   __,   __,    0,   80 }, // 7. 팔다리 엇갈리기
-    { 0,   95,    2,   __,   70,   60,   90,   __,   __,  100,    0 }, // 8. 누우며 엇갈리기
-    { 0,    2,   95,   __,   __,   90,   60,   __,   __,    0,  100 }, // 9. 누우며 엇갈리기
-    { 0,   __,    5,    0,   __,   60,   60,   60,   60,   50,   50 }, // 10. 누우며 자세 정렬
-    { 1,   95,   95,   __,  100,   10,   10,   90,   90,  100,  100 }, // 11. 전신 스트레칭
-    { 0,   50,   50,   __,   __,   60,   60,   50,   50,   50,   50 }, // 12. 양팔 위로 다리 평행
-    { 0,   95,    2,  100,   __,   __,   __,   10,   90,   __,   __ }, // 13. 공중부양 다리 쭉쭉이 팔 엇갈리기
-    { 0,   __,   __,   __,   __,   __,   __,   __,   __,    0,  100 }, // 14. 발목 스트레칭
-    { 0,   __,   __,   __,   __,   __,   __,   __,   __,   50,   50 }, // 15. 발목 복귀
-    { 0,    2,   95,   __,   __,   __,   __,   90,   10,   __,   __ }, // 16. 공중부양 다리 쭉쭉이 팔 엇갈리기
-    { 0,   __,   __,   __,   __,   __,   __,   __,   __,  100,    0 }, // 17. 발목 스트레칭
-    { 0,   __,   __,   __,   __,   __,   __,   __,   __,   50,   50 }, // 18. 발목 복귀
-    { 0,   __,    2,    0,   70,   40,   40,   20,   20,   __,   __ }, // 19. 기본 마사지 자세 복귀
-    { 0,   95,   __,   __,   __,   10,   90,   40,   40,   __,   __ }, // 20. 사이클 자세 준비
+/*
+timeout delay, arm1, arm2, stan, body, leg1, leg2, le1l, le2l, ank1, ank2 */
+    { 0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0 }, // 01 준비
+    { 6,    0,    0,    0,  100,    0,   45,   45,    0,    0,   50,   50 }, // 02 일어서
+    { 0,    1,   __,   95,   __,   __,   __,   __,   __,   __,   __,   __ }, // 03 왼팔 파도
+    { 6,    1,   95,   __,   __,   __,   __,   __,   __,   __,   __,   __ }, // 04 오른팔 파도
+    { 0,    0,   50,   50,   __,   __,   __,   __,   __,   __,   __,   __ }, // 05 팔 나란히
+    { 0,    0,    5,   95,   __,   __,   90,   __,   __,   __,    0,   80 }, // 06 팔다리 엇갈리기
+    { 0,    0,   95,    5,   __,   __,   45,   90,   __,   __,   80,    0 }, // 07 팔다리 엇갈리기
+    { 7,    0,    2,   95,    0,   70,   90,   45,   __,   __,    0,  100 }, // 08 누우며 엇갈리기
+    { 7,    0,   95,    5,   __,   __,   45,   90,   __,   __,  100,    0 }, // 09 누우며 엇갈리기
+    { 0,    0,    5,   __,   __,   __,   60,   45,   60,   60,   50,   50 }, // 10 누우며 자세 정렬
+    { 8,    1,   95,   95,   __,  100,   10,   10,   90,   90,  100,  100 }, // 11 전신 스트레칭
+    { 0,    0,   50,   50,   __,   __,   60,   60,   50,   50,   50,   50 }, // 12 양팔 위로 다리 평행
+    { 6,    0,    5,   95,   __,   __,   __,   __,   90,   10,   __,   __ }, // 13 공중부양 다리 쭉쭉이 팔 엇갈리기
+    { 0,    0,   __,   __,   __,   __,   __,   __,   __,   __,  100,    0 }, // 14 발목 스트레칭
+    { 0,    0,   95,    5,   __,   __,   __,   __,   10,   90,   50,   50 }, // 15 공중부양 다리 쭉쭉이 팔 엇갈리기
+    { 0,    0,   __,   __,   __,   __,   __,   __,   __,   __,    0,  100 }, // 16 발목 스트레칭
+    { 7,    0,    5,   __,    5,   70,   40,   40,   20,   20,   50,   50 }, // 17 기본 마사지 자세 복귀
+    { 0,    0,   __,   __,   __,   80,   90,   90,   40,   40,   __,   __ }, // 18 사이클 자세 준비
+    { 0, 0xf1,   __,   __,   __,   __,   __,   __,   __,   __,   __,   __ }, // 19 (S)RoboWalking
+    { 8,    0,    5,    5,  100,   70,   40,   40,   20,   20,   50,   50 }, // 20 기본 자세 복귀
+    { 7,    0,   95,   95,  100,    0,   33,   33,    0,    0,   50,   50 }, // 21 스탠딩 + 양팔들기
+    { 8,    1,    5,    5,  100,    0,   33,   33,    0,    0,   50,   50 }, // 22 양팔 내리기
+    { 0,    0,    5,    5,  100,    0,   33,   33,    0,    0,   20,   20 }, // 23 시연모드 스탠딩
+    { 0,    0,   50,   50,   __,   __,   __,   __,   __,   __,   __,   __ }, // 24 앞으로 나란히
+    { 0,    0,    5,   95,   __,   __,   __,   __,   __,   __,    0,   50 }, // 25 팔 허우적, 발목 까딱
+    { 0,    0,   95,    5,   __,   __,   __,   __,   __,   __,   50,    0 }, // 26
+    { 0,    0,    5,   95,   __,   __,   __,   __,   __,   __,    0,   50 }, // 27
+    { 0,    0,   95,    5,   __,   __,   __,   __,   __,   __,   50,    0 }, // 28
+    { 0,    0,    5,    5,   __,   __,   __,   __,   __,   __,   50,   50 }, // 29
+    { 8,    0,   __,   __,    0,  100,   50,   50,   __,   __,   50,   50 }, // 30 눕기 CES0
+    { 0,    0,   95,    5,   __,   __,   10,   90,   70,   70,   __,   __ }, // 31 찢기 CES1
+    { 5,    0,   __,   __,   __,   __,   __,   __,   __,   __,  100,    0 }, // 32
+    { 0,    0,   __,   __,   __,   __,   __,   __,   __,   __,   50,   50 }, // 33
+    { 0,    0,    5,   95,   __,   __,   90,   10,   70,   70,   __,   __ }, // 34 찢기 CES2
+    { 5,    0,   __,   __,   __,   __,   __,   __,   __,   __,    0,  100 }, // 35
+    { 0,    0,   50,   50,   __,   __,   __,   __,   __,   __,   50,   50 }, // 36
+    { 9,    0,    5,    5,   __,   10,   45,   45,    0,    0,   50,   50 }, // 37 기본 자세 복귀
+    { 0,    0,   10,   90,   __,   80,   90,   20,   50,   50,   50,   50 }, // 38 Fin.
 };
 
 const int MapCount = sizeof(Map) / sizeof(Maptype);
@@ -64,7 +83,7 @@ void Chair::print() const {
            _arm1, _arm2, _stan, _body, _leg1, _leg2, _le1l, _le2l, _ank1, _ank2);
 }
 
-MainThread::MainThread() : AbstractThread(50) {
+MainThread::MainThread() : AbstractThread(20) {
     _currentChairIndex = 0;
     _chairCount = 0;
     _updateCounter = 0;
@@ -177,7 +196,7 @@ bool MainThread::updateChairData(int index) {
 
     // HTTP GET 요청
     HttpClient client;
-    client.setTimeout(1);
+    client.setTimeout(0);  // HttpClient 내부 타임아웃 사용 (300ms)
 
     std::string url = "http://" + ip + "/v1/api/ces/info";
     std::string response;
@@ -222,22 +241,27 @@ void MainThread::worker() {
     if (_chairCount == 0) {
         return;
     }
-
+    
+    // WAITING_STOP 상태일 때는 빠른 업데이트 (10ms)
+    if (_mapState == MapState::WAITING_STOP) {
+        setSleepTime(10);
+    } else {
+        setSleepTime(20);
+    }
+    
     // 포지션 모드: 한 번만 전송
     if (_positionMode && !_positionSent) {
         sendPositionToAllChairs();
         _positionSent = true;
         printf("[INFO] Position %d sent to all chairs. Press Ctrl+C to exit.\n", _positionValue);
     }
-
+    
     // 정지 모드: 한 번만 전송
     if (_stopMode && !_stopSent) {
         sendStopToAllChairs();
         _stopSent = true;
         printf("[INFO] Stop command sent to all chairs. Press Ctrl+C to exit.\n");
-    }
-
-    // 병렬로 모든 Chair 업데이트
+    }    // 병렬로 모든 Chair 업데이트
     std::vector<std::thread> threads;
 
     for (int i = 0; i < _chairCount; i++) {
@@ -337,15 +361,72 @@ bool MainThread::sendMapToChair(int chairIndex, const Maptype& map) {
     return true;
 }
 
+// Chair에 특별 액션 명령 전송
+bool MainThread::sendActionToChair(int chairIndex, int action) {
+    if (chairIndex < 0 || chairIndex >= _chairCount) {
+        return false;
+    }
+
+    std::string ip = _dev[chairIndex].getIp();
+    if (ip.empty()) {
+        return false;
+    }
+
+    // URL 생성
+    char url[256];
+    sprintf(url, "http://%s/v1/api/ces/runAction", ip.c_str());
+
+    // HTTP GET 요청
+    HttpClient client;
+    client.setTimeout(1);
+    std::string response;
+
+    if (!client.get(url, response)) {
+        printf("[ERROR] Failed to send action to Chair[%d] %s\n", chairIndex, ip.c_str());
+        return false;
+    }
+
+    return true;
+}
+
+// 모든 Chair에 특별 액션 명령 전송
+void MainThread::sendActionToAllChairs(int action) {
+    printf("[INFO] Sending action %d to all chairs...\n", action);
+
+    std::vector<std::thread> threads;
+
+    for (int i = 0; i < _chairCount; i++) {
+        threads.push_back(std::thread([this, i, action]() {
+            sendActionToChair(i, action);
+        }));
+    }
+
+    for (auto& t : threads) {
+        if (t.joinable()) {
+            t.join();
+        }
+    }
+
+    printf("[INFO] Action %d sent to all chairs\n", action);
+}
+
 // 모든 Chair가 RUN 상태인지 확인 (개선된 버전)
 bool MainThread::allChairsRunning() {
+    int onlineCount = 0;
+    
     // 각 Chair의 run 상태 확인 및 기록
     for (int i = 0; i < _chairCount; i++) {
         if (_dev[i].isOnline()) {
+            onlineCount++;
             if (_dev[i].getRun() != 0) {
                 _chairEverRan[i] = true;  // 한번이라도 run 상태가 되면 기록
             }
         }
+    }
+
+    // 온라인 Chair가 하나도 없으면 false 반환 (대기)
+    if (onlineCount == 0) {
+        return false;
     }
 
     // 모든 온라인 Chair가 run 상태이거나, 한번이라도 run 상태였으면 OK
@@ -363,15 +444,33 @@ bool MainThread::allChairsRunning() {
 
 // 모든 Chair가 STOP 상태인지 확인
 bool MainThread::allChairsStopped() {
+    int onlineCount = 0;
     for (int i = 0; i < _chairCount; i++) {
         if (_dev[i].isOnline()) {
+            onlineCount++;
             // 한번이라도 run 상태였던 Chair만 체크
             if (_chairEverRan[i] && _dev[i].getRun() != 0) {
                 return false;
             }
         }
     }
+    // 온라인 Chair가 하나도 없으면 false 반환 (대기)
+    if (onlineCount == 0) {
+        return false;
+    }
     return true;
+}
+
+// 하나라도 특별 액션 실행 중인지 확인 (run == 2)
+bool MainThread::anyChairRunningAction() {
+    for (int i = 0; i < _chairCount; i++) {
+        if (_dev[i].isOnline()) {
+            if (_dev[i].getRun() == 2) {  // 특별 액션 실행 중
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 // Map 시퀀스 처리
@@ -400,6 +499,14 @@ void MainThread::processMapSequence() {
 #if !SURFING
                 currentMap.delay = 0;
 #endif
+                // delay가 0xf1이면 특별 액션 전송 (action=1)
+                if (currentMap.delay == 0xf1) {
+                    sendActionToAllChairs(1);
+                    printf("[INFO] Special action sent, waiting for completion...\n");
+                    _mapState = MapState::WAITING_ACTION;
+                    break;
+                }
+
                 // delay가 0이면 모든 Chair에 동시 전송
                 if (currentMap.delay == 0) {
                     // 모든 Chair에 명령 전송 (병렬)
@@ -465,21 +572,54 @@ void MainThread::processMapSequence() {
             {
                 time_t elapsed = time(NULL) - _waitRunStartTime;
 
-                // 2초 타임아웃: 2초 안에 run 상태가 안되면 이미 목표 위치에 있다고 간주
-                if (elapsed >= 2 || allChairsRunning()) {
-                    if (elapsed >= 2) {
+                // 3초 타임아웃: 3초 안에 run 상태가 안되면 이미 목표 위치에 있다고 간주
+                if (elapsed >= 3 || allChairsRunning()) {
+                    if (elapsed >= 3) {
                         printf("[INFO] Timeout waiting for run state (some chairs already at target position)\n");
                     } else {
                         printf("[INFO] All chairs are running, waiting for completion...\n");
                     }
+                    _waitStopStartTime = time(NULL);  // WAITING_STOP 시작 시간 기록
                     _mapState = MapState::WAITING_STOP;
                 }
             }
             break;
 
         case MapState::WAITING_STOP:
-            if (allChairsStopped()) {
-                printf("[INFO] All chairs completed map %zu\n", _currentMapIndex + 1);
+            {
+                time_t elapsed = time(NULL) - _waitStopStartTime;
+                bool stopped = allChairsStopped();
+                bool timedOut = false;
+
+                // timeout이 설정된 경우 체크 (0이 아닌 경우)
+                if (_lastSentMap.timeout > 0 && elapsed >= _lastSentMap.timeout) {
+                    timedOut = true;
+                    printf("[INFO] Timeout (%d sec) reached for map %zu\n", _lastSentMap.timeout, _currentMapIndex + 1);
+                }
+
+                if (stopped || timedOut) {
+                    if (stopped) {
+                        printf("[INFO] All chairs completed map %zu\n", _currentMapIndex + 1);
+                    }
+                    _currentMapIndex++;
+
+#if REPEAT
+                    // 맵이 끝까지 실행되면 처음부터 다시 반복
+                    if (_currentMapIndex >= _maps.size()) {
+                        _currentMapIndex = 0;
+                        printf("[INFO] All maps completed! Restarting from first map...\n");
+                    }
+#endif
+
+                    _mapState = MapState::SENDING;  // 다음 Map 바로 전송
+                }
+            }
+            break;
+
+        case MapState::WAITING_ACTION:
+            // 모든 Chair의 특별 액션 완료 대기 (run == 2 → run == 0)
+            if (!anyChairRunningAction()) {
+                printf("[INFO] All chairs completed special action\n");
                 _currentMapIndex++;
 
 #if REPEAT

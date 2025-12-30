@@ -83,9 +83,9 @@ bool HttpClient::connectToHost(const std::string& host, int port, int& sockfd) {
     // 타임아웃 설정
     struct timeval timeout;
     timeout.tv_sec = 0;
-    timeout.tv_usec = 500000; // 0.5초
+    timeout.tv_usec = 300000; // 0.3초
 #ifdef _WIN32
-    DWORD timeoutMs = 500;
+    DWORD timeoutMs = 300;
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeoutMs, sizeof(timeoutMs));
     setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeoutMs, sizeof(timeoutMs));
 #else
@@ -132,8 +132,8 @@ bool HttpClient::connectToHost(const std::string& host, int port, int& sockfd) {
         FD_SET(sockfd, &fdset);
         
         struct timeval tv;
-        tv.tv_sec = 1;
-        tv.tv_usec = 0;
+        tv.tv_sec = 0;
+        tv.tv_usec = 300000; // 0.3초 타임아웃
         
 #ifdef _WIN32
         if (select(0, NULL, &fdset, NULL, &tv) <= 0) {
@@ -194,6 +194,17 @@ bool HttpClient::receiveResponse(int sockfd, std::string& response) {
         ssize_t received = recv(sockfd, buffer, sizeof(buffer) - 1, 0);
         
         if (received < 0) {
+#ifdef _WIN32
+            int error = WSAGetLastError();
+            // WSAEWOULDBLOCK 또는 WSAETIMEDOUT은 타임아웃으로 간주
+            if (error == WSAEWOULDBLOCK || error == WSAETIMEDOUT) {
+                // 타임아웃 발생, 받은 데이터가 있으면 성공으로 처리
+                if (!response.empty()) {
+                    break;
+                }
+            }
+            printf("[ERROR] Receive failed (WSA error: %d)\n", error);
+#else
             // EAGAIN이나 EWOULDBLOCK은 타임아웃으로 간주
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // 타임아웃 발생, 받은 데이터가 있으면 성공으로 처리
@@ -202,6 +213,7 @@ bool HttpClient::receiveResponse(int sockfd, std::string& response) {
                 }
             }
             printf("[ERROR] Receive failed (errno: %d)\n", errno);
+#endif
             return false;
         }
         
@@ -233,15 +245,18 @@ bool HttpClient::get(const std::string& url, std::string& response) {
     
     int sockfd;
     if (!connectToHost(host, port, sockfd)) {
+        printf("[ERROR] Failed to connect to %s:%d\n", host.c_str(), port);
         return false;
     }
     
     if (!sendRequest(sockfd, host, path)) {
+        printf("[ERROR] Failed to send request to %s:%d%s\n", host.c_str(), port, path.c_str());
         close(sockfd);
         return false;
     }
     
     if (!receiveResponse(sockfd, response)) {
+        printf("[ERROR] Failed to receive response from %s:%d\n", host.c_str(), port);
         close(sockfd);
         return false;
     }

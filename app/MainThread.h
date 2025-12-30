@@ -63,6 +63,7 @@ private:
 };
 
 typedef struct {
+    int timeout;
     int delay;      // 이 맵을 보내기 전 대기 시간 (초)
     int _arm1;
     int _arm2;
@@ -84,7 +85,8 @@ enum class MapState {
     DELAYING,       // delay 시간 대기 중
     SENDING,        // 명령 전송 중
     WAITING_RUN,    // 모든 Chair가 RUN 상태로 변경되기를 대기
-    WAITING_STOP    // 모든 Chair가 STOP 상태로 변경되기를 대기
+    WAITING_STOP,   // 모든 Chair가 STOP 상태로 변경되기를 대기
+    WAITING_ACTION  // 특별 액션(run==2) 완료 대기
 };
 
 class MainThread : public AbstractThread {
@@ -127,6 +129,7 @@ private:
     time_t _delayStartTime;
     Maptype _lastSentMap;  // 마지막으로 보낸 Map 저장
     time_t _waitRunStartTime;  // WAITING_RUN 시작 시간
+    time_t _waitStopStartTime;  // WAITING_STOP 시작 시간 (timeout용)
     bool _chairEverRan[10];  // 각 Chair가 한번이라도 run 상태가 되었는지
 
 protected:
@@ -140,8 +143,11 @@ private:
 
     // Map 실행 관련 메서드
     bool sendMapToChair(int chairIndex, const Maptype& map);
+    bool sendActionToChair(int chairIndex, int action);  // 특별 액션 전송
+    void sendActionToAllChairs(int action);               // 모든 Chair에 액션 전송
     bool allChairsRunning();
     bool allChairsStopped();
+    bool anyChairRunningAction();  // 하나라도 액션 실행 중인지 확인 (run==2)
     void processMapSequence();
 
     // 포지션 명령 전송
