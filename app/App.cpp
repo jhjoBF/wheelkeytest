@@ -41,6 +41,33 @@ void App::makeThreads() {
     _threads.push_back(mainThread);
 }
 
+void App::makeThreads(int startMapIndex) {
+    MainThread* mainThread = new MainThread();
+    // Chair IP 설정 (192.168.0.10 ~ 192.168.0.19)
+    for (int i = 0; i < CHAIR_COUNT; i++) {
+        char ip[20];
+        sprintf(ip, "192.168.0.%d", CHAIR_IP_START + i);
+        mainThread->setChairIp(i, ip);
+    }
+    // Chair 개수 설정
+    mainThread->setChairCount(CHAIR_COUNT);
+
+    // Map 추가 (외부에 정의된 Map 배열 사용)
+    extern Maptype Map[];
+    extern const int MapCount;
+    for (int i = 0; i < MapCount; i++) {
+        mainThread->addMap(Map[i]);
+    }
+
+    // 시작 맵 인덱스 설정
+    mainThread->setStartMapIndex(startMapIndex);
+
+    // Map 시퀀스 시작
+    mainThread->startMapSequence();
+
+    _threads.push_back(mainThread);
+}
+
 void App::startThreads() {
     for (const auto& thread : _threads)
         thread->start();
@@ -48,6 +75,11 @@ void App::startThreads() {
 
 void App::initialize() {
     makeThreads();
+    startThreads();
+}
+
+void App::initialize(int startMapIndex) {
+    makeThreads(startMapIndex);
     startThreads();
 }
 

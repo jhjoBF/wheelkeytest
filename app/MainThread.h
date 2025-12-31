@@ -102,6 +102,7 @@ public:
     void addMap(const Maptype& map);
     void startMapSequence();
     void stopMapSequence();
+    void setStartMapIndex(int index);    // 시작 맵 인덱스 설정
 
     // 모드 설정
     void setPositionMode(int position);  // 포지션 모드 설정

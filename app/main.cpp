@@ -59,11 +59,13 @@ void printUsage(const char* programName) {
     printf("Usage: %s [OPTIONS]\n", programName);
     printf("Options:\n");
     printf("  (no option)    : Run map sequence (default)\n");
+    printf("  -j <n>         : Start map sequence from index n (0-based)\n");
     printf("  -p <position>  : Send position command once to all chairs\n");
     printf("  -s             : Send stop command once to all chairs\n");
     printf("  -m             : Monitor mode (info only, no map sending)\n");
     printf("\nExamples:\n");
-    printf("  %s           # Run map sequence\n", programName);
+    printf("  %s           # Run map sequence from beginning\n", programName);
+    printf("  %s -j 5      # Start from map index 5\n", programName);
     printf("  %s -p 1      # Send position 1 to all chairs\n", programName);
     printf("  %s -s        # Send stop command to all chairs\n", programName);
     printf("  %s -m        # Monitor mode\n", programName);
@@ -85,9 +87,19 @@ int main(int argc, char* argv[]) {
     
     RunMode mode = RunMode::MAP_SEQUENCE;
     int position = 0;
+    int startMapIndex = 0;  // -j 옵션으로 지정할 시작 맵 인덱스
     
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-p") == 0) {
+        if (strcmp(argv[i], "-j") == 0) {
+            if (i + 1 < argc) {
+                startMapIndex = atoi(argv[i + 1]);
+                i++;
+            } else {
+                printf("Error: -j requires a map index number\n");
+                printUsage(argv[0]);
+                return 1;
+            }
+        } else if (strcmp(argv[i], "-p") == 0) {
             if (i + 1 < argc) {
                 position = atoi(argv[i + 1]);
                 mode = RunMode::POSITION;
@@ -116,8 +128,13 @@ int main(int argc, char* argv[]) {
     gApp = &app;
     
     if (mode == RunMode::MAP_SEQUENCE) {
-        printf("[INFO] Running in MAP_SEQUENCE mode\n");
-        app.initialize();
+        if (startMapIndex > 0) {
+            printf("[INFO] Running in MAP_SEQUENCE mode (starting from index %d)\n", startMapIndex);
+            app.initialize(startMapIndex);
+        } else {
+            printf("[INFO] Running in MAP_SEQUENCE mode\n");
+            app.initialize();
+        }
     } else if (mode == RunMode::POSITION) {
         printf("[INFO] Running in POSITION mode (position=%d)\n", position);
         app.initializePosition(position);
