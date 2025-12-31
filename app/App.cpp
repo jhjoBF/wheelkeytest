@@ -14,8 +14,8 @@ App::App() : AbstractThread(300) {
 }
 App::~App() {}
 
-#define CHAIR_COUNT 2
-#define CHAIR_IP_START 20
+#define CHAIR_COUNT 3       // 갯수
+#define CHAIR_IP_START 20   // 시작주소 192.168.0.x, x+1, x+2, ...
 
 void App::makeThreads() {
     MainThread* mainThread = new MainThread();

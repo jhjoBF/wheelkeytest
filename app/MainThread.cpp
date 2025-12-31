@@ -8,9 +8,9 @@
 #include "HttpClient.h"
 #include "JsonParser.h"
 
-#define REPEAT   0 //반복
-#define SYMMETRY 1 //대칭
-#define SURFING  1 //파도타기
+#define REPEAT   0 //반복       // 0: 반복안함
+#define SYMMETRY 0 //대칭       // 1: 끝자리 홀수짝수 대칭
+#define SURFING  0 //파도타기   // 1: 끝가지 2개씩 파도타기 10,11 -> 12,13 -> ...
 
 #define __ 0xff
 Maptype Map[] = {
