@@ -62,12 +62,14 @@ void printUsage(const char* programName) {
     printf("  -j <n>         : Start map sequence from index n (0-based)\n");
     printf("  -p <position>  : Send position command once to all chairs\n");
     printf("  -s             : Send stop command once to all chairs\n");
+    printf("  -r             : Send reboot command once to all chairs\n");
     printf("  -m             : Monitor mode (info only, no map sending)\n");
     printf("\nExamples:\n");
     printf("  %s           # Run map sequence from beginning\n", programName);
     printf("  %s -j 5      # Start from map index 5\n", programName);
     printf("  %s -p 1      # Send position 1 to all chairs\n", programName);
     printf("  %s -s        # Send stop command to all chairs\n", programName);
+    printf("  %s -r        # Send reboot command to all chairs\n", programName);
     printf("  %s -m        # Monitor mode\n", programName);
 }
 
@@ -82,6 +84,7 @@ int main(int argc, char* argv[]) {
         MAP_SEQUENCE,   // 기본: 맵 시퀀스 실행
         POSITION,       // -p: 포지션 명령 전송
         STOP,           // -s: 정지 명령 전송
+        REBOOT,         // -r: 재부팅 명령 전송
         MONITOR         // -m: 모니터링만
     };
     
@@ -111,6 +114,8 @@ int main(int argc, char* argv[]) {
             }
         } else if (strcmp(argv[i], "-s") == 0) {
             mode = RunMode::STOP;
+        } else if (strcmp(argv[i], "-r") == 0) {
+            mode = RunMode::REBOOT;
         } else if (strcmp(argv[i], "-m") == 0) {
             mode = RunMode::MONITOR;
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
@@ -141,6 +146,9 @@ int main(int argc, char* argv[]) {
     } else if (mode == RunMode::STOP) {
         printf("[INFO] Running in STOP mode\n");
         app.initializeStop();
+    } else if (mode == RunMode::REBOOT) {
+        printf("[INFO] Running in REBOOT mode\n");
+        app.initializeReboot();
     } else if (mode == RunMode::MONITOR) {
         printf("[INFO] Running in MONITOR mode\n");
         app.initializeMonitor();

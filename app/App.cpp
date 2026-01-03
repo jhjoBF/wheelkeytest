@@ -98,6 +98,11 @@ void App::initializeStop() {
     startThreads();
 }
 
+void App::initializeReboot() {
+    makeThreadsReboot();
+    startThreads();
+}
+
 void App::makeThreadsPosition(int position) {
     MainThread* mainThread = new MainThread();
     // Chair IP 설정 (192.168.0.10 ~ 192.168.0.19)
@@ -125,6 +130,21 @@ void App::makeThreadsStop() {
     mainThread->setChairCount(CHAIR_COUNT);
     // 정지 모드 설정
     mainThread->setStopMode(true);
+    _threads.push_back(mainThread);
+}
+
+void App::makeThreadsReboot() {
+    MainThread* mainThread = new MainThread();
+    // Chair IP 설정 (192.168.0.10 ~ 192.168.0.19)
+    for (int i = 0; i < CHAIR_COUNT; i++) {
+        char ip[20];
+        sprintf(ip, "192.168.0.%d", CHAIR_IP_START + i);
+        mainThread->setChairIp(i, ip);
+    }
+    // Chair 개수 설정
+    mainThread->setChairCount(CHAIR_COUNT);
+    // 재부팅 모드 설정
+    mainThread->setRebootMode(true);
     _threads.push_back(mainThread);
 }
 

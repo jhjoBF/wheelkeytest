@@ -99,6 +99,8 @@ MainThread::MainThread() : AbstractThread(20) {
     _positionSent = false;
     _stopMode = false;
     _stopSent = false;
+    _rebootMode = false;
+    _rebootSent = false;
 
     // 마지막 보낸 Map 초기화
     memset(&_lastSentMap, 0, sizeof(_lastSentMap));
@@ -131,6 +133,11 @@ void MainThread::setMonitorMode(bool monitor) {
 void MainThread::setStopMode(bool stop) {
     _stopMode = stop;
     _stopSent = false;
+}
+
+void MainThread::setRebootMode(bool reboot) {
+    _rebootMode = reboot;
+    _rebootSent = false;
 }
 
 // 값이 255이면 "__", 아니면 숫자로 포맷팅
@@ -261,7 +268,16 @@ void MainThread::worker() {
         sendStopToAllChairs();
         _stopSent = true;
         printf("[INFO] Stop command sent to all chairs. Press Ctrl+C to exit.\n");
-    }    // 병렬로 모든 Chair 업데이트
+    }
+    
+    // 재부팅 모드: 한 번만 전송
+    if (_rebootMode && !_rebootSent) {
+        sendRebootToAllChairs();
+        _rebootSent = true;
+        printf("[INFO] Reboot command sent to all chairs. Press Ctrl+C to exit.\n");
+    }
+
+    // 병렬로 모든 Chair 업데이트
     std::vector<std::thread> threads;
 
     for (int i = 0; i < _chairCount; i++) {
@@ -281,7 +297,7 @@ void MainThread::worker() {
     }
 
     // 모니터 모드가 아니면 Map 시퀀스 처리
-    if (!_monitorMode && !_positionMode && !_stopMode) {
+    if (!_monitorMode && !_positionMode && !_stopMode && !_rebootMode) {
         processMapSequence();
     }
 
@@ -751,4 +767,54 @@ void MainThread::sendStopToAllChairs() {
     }
 
     printf("[INFO] Stop command sent to all chairs\n");
+}
+
+// 재부팅 명령을 Chair에 전송
+bool MainThread::sendRebootToChair(int chairIndex) {
+    if (chairIndex < 0 || chairIndex >= _chairCount) {
+        return false;
+    }
+
+    std::string ip = _dev[chairIndex].getIp();
+    if (ip.empty()) {
+        return false;
+    }
+
+    // URL 생성 (reboot 명령)
+    char url[256];
+    sprintf(url, "http://%s/v1/api/ces/reboot", ip.c_str());
+
+    // HTTP GET 요청
+    HttpClient client;
+    client.setTimeout(2);
+    std::string response;
+
+    if (!client.get(url, response)) {
+        printf("[ERROR] Failed to send reboot to Chair[%d] %s\n", chairIndex, ip.c_str());
+        return false;
+    }
+
+    printf("[INFO] Reboot command sent to Chair[%d] %s\n", chairIndex, ip.c_str());
+    return true;
+}
+
+// 모든 Chair에 재부팅 명령 전송
+void MainThread::sendRebootToAllChairs() {
+    printf("[INFO] Sending reboot command to all chairs...\n");
+
+    std::vector<std::thread> threads;
+
+    for (int i = 0; i < _chairCount; i++) {
+        threads.push_back(std::thread([this, i]() {
+            sendRebootToChair(i);
+        }));
+    }
+
+    for (auto& t : threads) {
+        if (t.joinable()) {
+            t.join();
+        }
+    }
+
+    printf("[INFO] Reboot command sent to all chairs\n");
 }

@@ -107,6 +107,7 @@ public:
     // 모드 설정
     void setPositionMode(int position);  // 포지션 모드 설정
     void setStopMode(bool stop);         // 정지 모드 설정
+    void setRebootMode(bool reboot);     // 재부팅 모드 설정
     void setMonitorMode(bool monitor);   // 모니터 모드 설정
 
 private:
@@ -122,6 +123,8 @@ private:
     bool _positionSent;     // 포지션 명령 전송 완료 여부
     bool _stopMode;         // true: 정지 명령 전송
     bool _stopSent;         // 정지 명령 전송 완료 여부
+    bool _rebootMode;       // true: 재부팅 명령 전송
+    bool _rebootSent;       // 재부팅 명령 전송 완료 여부
 
     // Map 실행 관련
     std::vector<Maptype> _maps;
@@ -158,6 +161,10 @@ private:
     // 정지 명령 전송
     bool sendStopToChair(int chairIndex);
     void sendStopToAllChairs();
+
+    // 재부팅 명령 전송
+    bool sendRebootToChair(int chairIndex);
+    void sendRebootToAllChairs();
 };
 
 #endif  // MAIN_THREAD_H_
