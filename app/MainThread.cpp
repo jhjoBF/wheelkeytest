@@ -399,12 +399,13 @@ bool MainThread::sendMapToChair(int chairIndex, const Maptype& map) {
             return true;
         }
         
-        // 마지막 시도가 아니면 100ms 대기 후 재시도
+        // 마지막 시도가 아니면 300ms 대기 후 재시도 (네트워크 안정화)
         if (retry < maxRetries - 1) {
 #ifdef _WIN32
-            Sleep(100);
+            Sleep(300);
+            //Sleep(50);//jhjo
 #else
-            usleep(100000);
+            usleep(300000);
 #endif
         }
     }
@@ -442,12 +443,13 @@ bool MainThread::sendActionToChair(int chairIndex, int action) {
             return true;
         }
         
-        // 마지막 시도가 아니면 100ms 대기 후 재시도
+        // 마지막 시도가 아니면 300ms 대기 후 재시도 (네트워크 안정화)
         if (retry < maxRetries - 1) {
 #ifdef _WIN32
-            Sleep(100);
+            Sleep(300);
+            //Sleep(50); //jhjo
 #else
-            usleep(100000);
+            usleep(300000);
 #endif
         }
     }
@@ -466,6 +468,16 @@ void MainThread::sendActionToAllChairs(int action) {
         threads.push_back(std::thread([this, i, action]() {
             sendActionToChair(i, action);
         }));
+        
+        // 각 Chair 연결 시작 간격을 두어 네트워크 부하 분산 (200ms)
+        if (i < _chairCount - 1) {
+#ifdef _WIN32
+            Sleep(300);
+            //Sleep(50); //jhjo
+#else
+            usleep(200000);
+#endif
+        }
     }
 
     for (auto& t : threads) {
@@ -576,12 +588,18 @@ void MainThread::processMapSequence() {
 
                 // delay가 0이면 모든 Chair에 동시 전송
                 if (currentMap.delay == 0) {
-                    // 모든 Chair에 명령 전송 (병렬)
+                    // 모든 Chair에 명령 전송 (병렬, 시간차 두고 시작)
                     std::vector<std::thread> threads;
                     for (int i = 0; i < _chairCount; i++) {
                         threads.push_back(std::thread([this, i, &currentMap]() {
                             sendMapToChair(i, currentMap);
                         }));
+                        
+                        // 각 Chair 연결 시작 간격 (200ms)
+                        if (i < _chairCount - 1) {
+                            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                            //std::this_thread::sleep_for(std::chrono::milliseconds(50));//jhjo
+                        }
                     }
 
                     for (auto& t : threads) {
