@@ -4,6 +4,7 @@
 #include <thread>
 #include <vector>
 #include <queue>
+#include <chrono>
 #include "AbstractThread.h"
 
 class Chair {
@@ -132,7 +133,7 @@ private:
     MapState _mapState;
     time_t _delayStartTime;
     Maptype _lastSentMap;  // 마지막으로 보낸 Map 저장
-    time_t _waitRunStartTime;  // WAITING_RUN 시작 시간
+    std::chrono::steady_clock::time_point _waitRunStartTime;  // WAITING_RUN 시작 시간 (밀리초 정밀도)
     time_t _waitStopStartTime;  // WAITING_STOP 시작 시간 (timeout용)
     bool _chairEverRan[10];  // 각 Chair가 한번이라도 run 상태가 되었는지
 

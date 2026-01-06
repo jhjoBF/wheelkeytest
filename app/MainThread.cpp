@@ -97,7 +97,7 @@ MainThread::MainThread() : AbstractThread(20) {
     _currentMapIndex = 0;
     _mapState = MapState::IDLE;
     _delayStartTime = 0;
-    _waitRunStartTime = 0;
+    _waitRunStartTime = std::chrono::steady_clock::now();  // chrono로 초기화
 
     // 모드 초기화
     _monitorMode = false;
@@ -390,7 +390,7 @@ bool MainThread::sendMapToChair(int chairIndex, const Maptype& map) {
     client.setTimeout(1);
     std::string response;
 
-    const int maxRetries = 5;  // 최대 5회 재시도
+    const int maxRetries = 3;  // 최대 3회 재시도 (5회는 너무 많음)
     for (int retry = 0; retry < maxRetries; retry++) {
         if (client.get(url, response)) {
             if (retry > 0) {
@@ -399,13 +399,12 @@ bool MainThread::sendMapToChair(int chairIndex, const Maptype& map) {
             return true;
         }
         
-        // 마지막 시도가 아니면 300ms 대기 후 재시도 (네트워크 안정화)
+        // 마지막 시도가 아니면 200ms 대기 후 재시도 (빠른 재시도)
         if (retry < maxRetries - 1) {
 #ifdef _WIN32
-            Sleep(300);
-            //Sleep(50);//jhjo
+            Sleep(200);
 #else
-            usleep(300000);
+            usleep(200000);
 #endif
         }
     }
@@ -434,7 +433,7 @@ bool MainThread::sendActionToChair(int chairIndex, int action) {
     client.setTimeout(1);
     std::string response;
 
-    const int maxRetries = 5;  // 최대 5회 재시도
+    const int maxRetries = 3;  // 최대 3회 재시도
     for (int retry = 0; retry < maxRetries; retry++) {
         if (client.get(url, response)) {
             if (retry > 0) {
@@ -443,13 +442,12 @@ bool MainThread::sendActionToChair(int chairIndex, int action) {
             return true;
         }
         
-        // 마지막 시도가 아니면 300ms 대기 후 재시도 (네트워크 안정화)
+        // 마지막 시도가 아니면 200ms 대기 후 재시도 (빠른 재시도)
         if (retry < maxRetries - 1) {
 #ifdef _WIN32
-            Sleep(300);
-            //Sleep(50); //jhjo
+            Sleep(200);
 #else
-            usleep(300000);
+            usleep(200000);
 #endif
         }
     }
@@ -469,13 +467,12 @@ void MainThread::sendActionToAllChairs(int action) {
             sendActionToChair(i, action);
         }));
         
-        // 각 Chair 연결 시작 간격을 두어 네트워크 부하 분산 (200ms)
+        // 각 Chair 연결 시작 간격 (100ms - 네트워크 부하 분산, 빠른 시작)
         if (i < _chairCount - 1) {
 #ifdef _WIN32
-            Sleep(300);
-            //Sleep(50); //jhjo
+            Sleep(100);
 #else
-            usleep(200000);
+            usleep(100000);
 #endif
         }
     }
@@ -595,10 +592,9 @@ void MainThread::processMapSequence() {
                             sendMapToChair(i, currentMap);
                         }));
                         
-                        // 각 Chair 연결 시작 간격 (200ms)
+                        // 각 Chair 연결 시작 간격 (100ms - 네트워크 부하 분산, 빠른 시작)
                         if (i < _chairCount - 1) {
-                            std::this_thread::sleep_for(std::chrono::milliseconds(200));
-                            //std::this_thread::sleep_for(std::chrono::milliseconds(50));//jhjo
+                            std::this_thread::sleep_for(std::chrono::milliseconds(100));
                         }
                     }
 
@@ -648,23 +644,39 @@ void MainThread::processMapSequence() {
                 }
 
                 printf("[INFO] Waiting for all chairs to start running...\n");
-                _waitRunStartTime = time(NULL);
+                _waitRunStartTime = std::chrono::steady_clock::now();  // 밀리초 정밀도 타이머 시작
                 _mapState = MapState::WAITING_RUN;
             }
             break;
 
         case MapState::WAITING_RUN:
             {
-                time_t elapsed = time(NULL) - _waitRunStartTime;
+                auto now = std::chrono::steady_clock::now();
+                auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - _waitRunStartTime).count();
 
-                // 1초 타임아웃: 1초 안에 run 상태가 안되면 이미 목표 위치에 있다고 간주
-                if (elapsed >= 1 || allChairsRunning()) {
-                    if (elapsed >= 1) {
-                        printf("[INFO] Timeout waiting for run state (some chairs already at target position)\n");
+                // 빠른 타임아웃: 300ms 안에 아무도 run 상태 안되면 이미 목표 위치에 있다고 판단
+                bool anyRan = false;
+                for (int i = 0; i < _chairCount; i++) {
+                    if (_chairEverRan[i]) {
+                        anyRan = true;
+                        break;
+                    }
+                }
+                
+                // 모든 Chair가 run 중이거나, 300ms 안에 아무도 run 안했으면 다음 단계로
+                if (allChairsRunning() || (elapsed >= 300 && !anyRan)) {
+                    if (elapsed >= 300 && !anyRan) {
+                        printf("[INFO] Quick timeout (300ms) - chairs already at target position\n");
                     } else {
-                        printf("[INFO] All chairs are running, waiting for completion...\n");
+                        printf("[INFO] All chairs running, waiting for completion... (detected in %ldms)\n", elapsed);
                     }
                     _waitStopStartTime = time(NULL);  // WAITING_STOP 시작 시간 기록
+                    _mapState = MapState::WAITING_STOP;
+                }
+                // 최대 1초 타임아웃 (일부 Chair는 run 상태였지만 전체가 안됨)
+                else if (elapsed >= 1000) {
+                    printf("[INFO] Timeout (1s) - proceeding to stop wait\n");
+                    _waitStopStartTime = time(NULL);
                     _mapState = MapState::WAITING_STOP;
                 }
             }
