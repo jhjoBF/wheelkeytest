@@ -4,13 +4,20 @@
 #include <ctime>
 #include <thread>
 #include <chrono>
+
+#ifdef _WIN32
+    #include <windows.h>
+#else
+    #include <unistd.h>
+#endif
+
 #include "MainThread.h"
 #include "HttpClient.h"
 #include "JsonParser.h"
 
 #define REPEAT   0 //반복       // 0: 반복안함
-#define SYMMETRY 0 //대칭       // 1: 끝자리 홀수짝수 대칭
-#define SURFING  0 //파도타기   // 1: 끝가지 2개씩 파도타기 10,11 -> 12,13 -> ...
+#define SYMMETRY 1 //대칭       // 1: 끝자리 홀수짝수 대칭
+#define SURFING  1 //파도타기   // 1: 끝가지 2개씩 파도타기 10,11 -> 12,13 -> ...
 
 //#define __ 0xff
 Maptype Map[] = {
@@ -18,42 +25,42 @@ Maptype Map[] = {
 timeout delay, arm1, arm2, stan, body, leg1, leg2, le1l, le2l, ank1, ank2 */
     { 0,    0,    5,    5,    0,    0,    0,    0,    0,    0,    0,    0 }, // 00 준비
     { 6,    0,    5,    5,  100,    0,   45,   45,    0,    0,   50,   50 }, // 01 일어서
-    { 0,    1,    5,   95,  100,    0,   45,   45,    0,    0,   50,   50 }, // 02 왼팔 파도
+    { 0,    1,   95,    5,  100,    0,   45,   45,    0,    0,   50,   50 }, // 02 왼팔 파도
     { 6,    1,   95,   95,  100,    0,   45,   45,    0,    0,   50,   50 }, // 03 오른팔 파도
     { 0,    0,   50,   50,  100,    0,   45,   45,    0,    0,   50,   50 }, // 04 팔 나란히
-    { 0,    0,    5,   95,  100,    0,   90,   45,    0,    0,    0,   80 }, // 05 팔다리 엇갈리기
-    { 0,    0,   95,    5,  100,    0,   45,   90,    0,    0,   80,    0 }, // 06 팔다리 엇갈리기
-    { 7,    0,    2,   95,    0,   70,   90,   45,    0,    0,    0,  100 }, // 07 누우며 엇갈리기
-    { 7,    0,   95,    5,    0,   70,   45,   90,    0,    0,  100,    0 }, // 08 누우며 엇갈리기
+    { 0,    0,   95,    5,  100,    0,   45,   90,    0,    0,   80,    0 }, // 05 팔다리 엇갈리기
+    { 0,    0,    5,   95,  100,    0,   90,   45,    0,    0,    0,   80 }, // 06 팔다리 엇갈리기
+    { 7,    0,   95,    5,    0,   70,   45,   90,   20,   20,  100,    0 }, // 07 누우며 엇갈리기
+    { 7,    0,    5,   95,    0,   70,   90,   45,   20,   20,    0,  100 }, // 08 누우며 엇갈리기
     { 0,    0,    5,    5,    0,   70,   45,   45,   60,   60,   50,   50 }, // 09 누우며 자세 정렬
     { 8,    1,   95,   95,    0,  100,   10,   10,   90,   90,  100,  100 }, // 10 전신 스트레칭
     { 0,    0,   50,   50,    0,  100,   45,   45,   50,   50,   50,   50 }, // 11 양팔 위로 다리 평행
-    { 6,    0,    5,   95,    0,  100,   45,   45,   90,   10,   50,   50 }, // 12 공중부양 다리 쭉쭉이 팔 엇갈리기
-    { 0,    0,    5,   95,    0,  100,   45,   45,   90,   10,  100,    0 }, // 13 발목 스트레칭
-    { 0,    0,   95,    5,    0,  100,   45,   45,   10,   90,   50,   50 }, // 14 공중부양 다리 쭉쭉이 팔 엇갈리기
-    { 0,    0,   95,    5,    0,  100,   45,   45,   10,   90,    0,  100 }, // 15 발목 스트레칭
+    { 6,    0,   95,    5,    0,  100,   45,   45,   10,   90,   50,   50 }, // 12 공중부양 다리 쭉쭉이 팔 엇갈리기
+    { 0,    0,   95,    5,    0,  100,   45,   45,   10,   90,    0,  100 }, // 13 발목 스트레칭
+    { 0,    0,    5,   95,    0,  100,   45,   45,   90,   10,   50,   50 }, // 14 공중부양 다리 쭉쭉이 팔 엇갈리기
+    { 0,    0,    5,   95,    0,  100,   45,   45,   90,   10,  100,    0 }, // 15 발목 스트레칭
     { 7,    0,    5,    5,    5,   70,   45,   45,   20,   20,   50,   50 }, // 16 기본 마사지 자세 복귀
     { 0,    0,    5,    5,    5,   80,   68,   68,   40,   40,   50,   50 }, // 17 사이클 자세 준비
     { 0, 0xf1,    5,    5,    5,   80,   68,   68,   40,   40,   50,   50 }, // 18 (S)RoboWalking
     { 8,    0,    5,    5,  100,   70,   45,   45,   20,   20,   50,   50 }, // 19 기본 자세 복귀
     { 7,    0,   95,   95,  100,    0,   33,   33,    0,    0,   50,   50 }, // 20 스탠딩 + 양팔들기
-    { 8,    1,    5,    5,  100,    0,   33,   33,    0,    0,   50,   50 }, // 21 양팔 내리기
+    { 8,    1,    5,    5,    5,    0,   33,   33,    0,    0,   50,   50 }, // 21 양팔 내리기
     { 0,    0,    5,    5,  100,    0,   33,   33,    0,    0,   20,   20 }, // 22 시연모드 스탠딩
     { 0,    0,   50,   50,  100,    0,   33,   33,    0,    0,   20,   20 }, // 23 앞으로 나란히
-    { 0,    0,    5,   95,  100,    0,   33,   33,    0,    0,    0,   50 }, // 24 팔 허우적, 발목 까딱
-    { 0,    0,   95,    5,  100,    0,   33,   33,    0,    0,   50,    0 }, // 25
-    { 0,    0,    5,   95,  100,    0,   33,   33,    0,    0,    0,   50 }, // 26
-    { 0,    0,   95,    5,  100,    0,   33,   33,    0,    0,   50,    0 }, // 27
+    { 0,    0,   95,    5,  100,    0,   33,   33,    0,    0,   50,    0 }, // 24 팔 허우적, 발목 까딱
+    { 0,    0,    5,   95,  100,    0,   33,   33,    0,    0,    0,   50 }, // 25
+    { 0,    0,   95,    5,  100,    0,   33,   33,    0,    0,   50,    0 }, // 26
+    { 0,    0,    5,   95,  100,    0,   33,   33,    0,    0,    0,   50 }, // 27
     { 0,    0,    5,    5,  100,    0,   33,   33,    0,    0,   50,   50 }, // 28
     { 8,    0,    5,    5,    0,  100,   45,   45,    0,    0,   50,   50 }, // 29 눕기 CES0
-    { 0,    0,   95,    5,    0,  100,   10,   90,   70,   70,   50,   50 }, // 30 찢기 CES1
-    { 5,    0,   95,    5,    0,  100,   10,   90,   70,   70,  100,    0 }, // 31
-    { 0,    0,   95,    5,    0,  100,   10,   90,   70,   70,   50,   50 }, // 32
-    { 0,    0,    5,   95,    0,  100,   90,   10,   70,   70,   50,   50 }, // 33 찢기 CES2
-    { 5,    0,    5,   95,    0,  100,   90,   10,   70,   70,    0,  100 }, // 34
-    { 0,    0,   50,   50,    0,  100,   90,   10,   70,   70,   50,   50 }, // 35
+    { 0,    0,    5,   95,    0,  100,   90,   10,   70,   70,   50,   50 }, // 30 찢기 CES1
+    { 5,    0,    5,   95,    0,  100,   90,   10,   70,   70,    0,  100 }, // 31
+    { 0,    0,    5,   95,    0,  100,   90,   10,   70,   70,   50,   50 }, // 32
+    { 0,    0,   95,    5,    0,  100,   10,   90,   70,   70,   50,   50 }, // 33 찢기 CES2
+    { 5,    0,   95,    5,    0,  100,   10,   90,   70,   70,  100,    0 }, // 34
+    { 0,    0,   50,   50,    0,  100,   10,   90,   70,   70,   50,   50 }, // 35
     { 9,    0,    5,    5,    0,   10,   45,   45,    0,    0,   50,   50 }, // 36 기본 자세 복귀
-    { 0,    0,   10,   90,    0,   80,   90,   20,   50,   50,   50,   50 }, // 37 Fin.
+    { 0,    0,    5,   90,    0,   80,   90,   20,   50,   50,   50,   50 }, // 37 Fin.
 };
 
 const int MapCount = sizeof(Map) / sizeof(Maptype);
@@ -201,16 +208,16 @@ bool MainThread::updateChairData(int index) {
         return false;
     }
 
-    // HTTP GET 요청
+    // HTTP GET 요청 (재시도 없음 - 상태 체크용)
     HttpClient client;
-    client.setTimeout(0);  // HttpClient 내부 타임아웃 사용 (300ms)
+    client.setTimeout(1);  // 1초 타임아웃
 
     std::string url = "http://" + ip + "/v1/api/ces/info";
     std::string response;
 
     if (!client.get(url, response)) {
         _dev[index].setOnline(false);
-        printf("[ERROR] Chair[%d] %s - Connection failed\n", index, ip.c_str());
+        // 에러 메시지 출력 안 함 (너무 많은 로그 방지)
         return false;
     }
 
@@ -249,8 +256,8 @@ void MainThread::worker() {
         return;
     }
     
-    // WAITING_STOP 상태일 때는 빠른 업데이트 (10ms)
-    if (_mapState == MapState::WAITING_STOP) {
+    // WAITING_STOP, WAITING_RUN, WAITING_ACTION 상태일 때는 빠른 업데이트 (10ms)
+    if (_mapState == MapState::WAITING_STOP || _mapState == MapState::WAITING_RUN || _mapState == MapState::WAITING_ACTION) {
         setSleepTime(10);
     } else {
         setSleepTime(20);
@@ -378,17 +385,32 @@ bool MainThread::sendMapToChair(int chairIndex, const Maptype& map) {
     url = url1;
 #endif
 
-    // HTTP GET 요청
+    // HTTP GET 요청 (재시도 로직 포함)
     HttpClient client;
     client.setTimeout(1);
     std::string response;
 
-    if (!client.get(url, response)) {
-        printf("[ERROR] Failed to send map to Chair[%d] %s\n", chairIndex, ip.c_str());
-        return false;
+    const int maxRetries = 5;  // 최대 5회 재시도
+    for (int retry = 0; retry < maxRetries; retry++) {
+        if (client.get(url, response)) {
+            if (retry > 0) {
+                printf("[INFO] Chair[%d] %s - Success after %d retries\n", chairIndex, ip.c_str(), retry);
+            }
+            return true;
+        }
+        
+        // 마지막 시도가 아니면 100ms 대기 후 재시도
+        if (retry < maxRetries - 1) {
+#ifdef _WIN32
+            Sleep(100);
+#else
+            usleep(100000);
+#endif
+        }
     }
-
-    return true;
+    
+    printf("[ERROR] Failed to send map to Chair[%d] %s after %d retries\n", chairIndex, ip.c_str(), maxRetries);
+    return false;
 }
 
 // Chair에 특별 액션 명령 전송
@@ -406,20 +428,35 @@ bool MainThread::sendActionToChair(int chairIndex, int action) {
     char url[256];
     sprintf(url, "http://%s/v1/api/ces/runAction", ip.c_str());
 
-    // HTTP GET 요청
+    // HTTP GET 요청 (재시도 로직 포함)
     HttpClient client;
     client.setTimeout(1);
     std::string response;
 
-    if (!client.get(url, response)) {
-        printf("[ERROR] Failed to send action to Chair[%d] %s\n", chairIndex, ip.c_str());
-        return false;
+    const int maxRetries = 5;  // 최대 5회 재시도
+    for (int retry = 0; retry < maxRetries; retry++) {
+        if (client.get(url, response)) {
+            if (retry > 0) {
+                printf("[INFO] Chair[%d] %s - Action success after %d retries\n", chairIndex, ip.c_str(), retry);
+            }
+            return true;
+        }
+        
+        // 마지막 시도가 아니면 100ms 대기 후 재시도
+        if (retry < maxRetries - 1) {
+#ifdef _WIN32
+            Sleep(100);
+#else
+            usleep(100000);
+#endif
+        }
     }
-
-    return true;
+    
+    printf("[ERROR] Failed to send action to Chair[%d] %s after %d retries\n", chairIndex, ip.c_str(), maxRetries);
+    return false;
 }
 
-// 모든 Chair에 특별 액션 명령 전송
+// 모든 Chair에 특별 액션 명령 전송// 모든 Chair에 특별 액션 명령 전송
 void MainThread::sendActionToAllChairs(int action) {
     printf("[INFO] Sending action %d to all chairs...\n", action);
 
@@ -602,9 +639,9 @@ void MainThread::processMapSequence() {
             {
                 time_t elapsed = time(NULL) - _waitRunStartTime;
 
-                // 3초 타임아웃: 3초 안에 run 상태가 안되면 이미 목표 위치에 있다고 간주
-                if (elapsed >= 3 || allChairsRunning()) {
-                    if (elapsed >= 3) {
+                // 1초 타임아웃: 1초 안에 run 상태가 안되면 이미 목표 위치에 있다고 간주
+                if (elapsed >= 1 || allChairsRunning()) {
+                    if (elapsed >= 1) {
                         printf("[INFO] Timeout waiting for run state (some chairs already at target position)\n");
                     } else {
                         printf("[INFO] All chairs are running, waiting for completion...\n");

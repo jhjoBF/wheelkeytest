@@ -82,10 +82,10 @@ bool HttpClient::connectToHost(const std::string& host, int port, int& sockfd) {
     
     // 타임아웃 설정
     struct timeval timeout;
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 300000; // 0.3초
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0; // 1초
 #ifdef _WIN32
-    DWORD timeoutMs = 300;
+    DWORD timeoutMs = 1000;
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeoutMs, sizeof(timeoutMs));
     setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeoutMs, sizeof(timeoutMs));
 #else
@@ -132,8 +132,8 @@ bool HttpClient::connectToHost(const std::string& host, int port, int& sockfd) {
         FD_SET(sockfd, &fdset);
         
         struct timeval tv;
-        tv.tv_sec = 0;
-        tv.tv_usec = 300000; // 0.3초 타임아웃
+        tv.tv_sec = 1;
+        tv.tv_usec = 0; // 1초 타임아웃
         
 #ifdef _WIN32
         if (select(0, NULL, &fdset, NULL, &tv) <= 0) {
